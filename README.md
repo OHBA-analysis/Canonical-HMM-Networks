@@ -4,9 +4,11 @@ Hidden Markov Models (HMMs) pre-trained on [Cam-CAN](https://cam-can.mrc-cbu.cam
 
 ## Preprocessing
 
+`38ROI_Giles` and `52ROI_Glasser` are source (parcel) level canonical HMMs.
+
 Source reconstruction was performed with a volumetric LCMV beamformer. Parcellated data must be at 250 Hz.
 
-Parcellations available:
+Corresponding parcellations:
 
 - `38ROI_Giles`: `fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii.gz`.
 - `52ROI_Glasser`: `Glasser52_binary_space-MNI152NLin6_res-8x8x8.nii.gz`.

@@ -1,6 +1,6 @@
-# Canonical Hidden Markov Model Networks for Study M/EEG
+# Canonical HMM Networks for Studying M/EEG
 
-This repository contains canonical Hidden Markove Models (HMMs) that were pre-trained on the [Cam-CAN](https://cam-can.mrc-cbu.cam.ac.uk/dataset/) dataset (using the [time-delay embedding](https://www.nature.com/articles/s41467-018-05316-z) approach).
+This repository contains canonical Hidden Markov Models (HMMs) that were pre-trained on the [Cam-CAN](https://cam-can.mrc-cbu.cam.ac.uk/dataset/) dataset (using the [time-delay embedding](https://www.nature.com/articles/s41467-018-05316-z) approach).
 
 ## Preprint
 
@@ -10,7 +10,13 @@ https://www.biorxiv.org/content/10.1101/2025.10.21.683692v1
 
 To run these scripts you need to install [FSL](https://fsl.fmrib.ox.ac.uk/fsl/docs/install/index.html) and [osl-dynamics](https://osl-dynamics.readthedocs.io/en/latest/install.html). Note, [osl-dynamics](https://osl-dynamics.readthedocs.io/en/latest/install.html) will install [MNE-Python](https://mne.tools/stable/index.html) automatically.
 
-We recommend running the Jupyter Notebook scripts using [VSCode](https://code.visualstudio.com/). Use the `osld` kernel (conda environment) that was created when you installed [osl-dynamics](https://osl-dynamics.readthedocs.io/en/latest/install.html) when running the scripts.
+Once you have installed the `osld` environment, a couple extra Python packages are needed. These can be installed via a terminal:
+```
+conda activate osld
+pip install fslpy ipyevents
+```
+
+We recommend running the Jupyter Notebook scripts using [VSCode](https://code.visualstudio.com/). Use the `osld` kernel (conda environment) when running the scripts.
 
 ## Example Scripts
 

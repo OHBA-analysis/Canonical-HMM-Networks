@@ -66,13 +66,13 @@ def detect_bad_segments(
 
     # Pick channels
     if picks == "eeg":
-        picks = mne.pick_types(raw.info, eeg=True, exclude="bads")
+        chs = mne.pick_types(raw.info, eeg=True, exclude="bads")
     else:
-        picks = mne.pick_types(raw.info, meg=picks, ref_meg=ref_meg, exclude="bads")
+        chs = mne.pick_types(raw.info, meg=picks, ref_meg=ref_meg, exclude="bads")
 
     # Get data
     data, times = raw.get_data(
-        picks=picks, reject_by_annotation="omit", return_times=True
+        picks=chs, reject_by_annotation="omit", return_times=True
     )
     if mode == "diff":
         data = np.diff(data, axis=1)
@@ -177,13 +177,13 @@ def detect_bad_channels(
 
     # Pick channels
     if picks == "eeg":
-        picks = mne.pick_types(raw.info, eeg=True, exclude="bads")
+        chs = mne.pick_types(raw.info, eeg=True, exclude="bads")
     else:
-        picks = mne.pick_types(raw.info, meg=picks, ref_meg=ref_meg, exclude="bads")
+        chs = mne.pick_types(raw.info, meg=picks, ref_meg=ref_meg, exclude="bads")
 
     # Compute PSD (bad channels excluded by MNE)
     psd = raw.compute_psd(
-        picks=picks,
+        picks=chs,
         fmin=fmin,
         fmax=fmax,
         n_fft=n_fft,
@@ -192,15 +192,15 @@ def detect_bad_channels(
     )
     pow_data = psd.get_data()
 
-    if len(picks) != pow_data.shape[0]:
+    if len(chs) != pow_data.shape[0]:
         raise RuntimeError(
-            f"Channel mismatch: {len(picks)} chans vs PSD shape {pow_data.shape[0]}"
+            f"Channel mismatch: {len(chs)} chans vs PSD shape {pow_data.shape[0]}"
         )
 
     # Check for NaN or zero PSD
     bad_forced = [
         ch
-        for ch, psd_ch in zip(picks, pow_data)
+        for ch, psd_ch in zip(chs, pow_data)
         if np.any(np.isnan(psd_ch)) or np.all(psd_ch == 0)
     ]
     if bad_forced:
@@ -216,8 +216,8 @@ def detect_bad_channels(
     mask = _gesd(X, alpha=significance_level)
 
     # Get the names for the bad channels
-    picks = np.array(raw.ch_names)[picks]
-    bads = list(picks[mask])
+    chs = np.array(raw.ch_names)[chs]
+    bads = list(chs[mask])
 
     # Mark bad channels in the Raw object
     raw.info["bads"] = bads

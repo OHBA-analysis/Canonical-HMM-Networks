@@ -43,8 +43,6 @@ def lcmv_beamformer(
 ):
     """Compute LCMV spatial filter.
 
-    Modified version of mne.beamformer.make_lcmv.
-
     Parameters
     ----------
     fns : OSLFilenames
@@ -386,7 +384,7 @@ def _make_lcmv(
 ):
     """Compute LCMV spatial filter.
 
-    Modified version of mne.beamformer._make_lcmv.
+    Modified version of mne.beamformer.make_lcmv.
     
     Parameters
     ----------
@@ -485,7 +483,6 @@ def _make_lcmv(
     data_rank = mne.rank.compute_rank(data_cov, rank=rank, info=info)
     noise_rank = mne.rank.compute_rank(noise_cov, rank=noise_rank, info=info)
 
-    # del noise_rank
     rank = data_rank
     mne_logger.info(f"Making LCMV beamformer with data cov rank {rank}")
     mne_logger.info(f"Making LCMV beamformer with noise cov rank {noise_rank}")
@@ -505,6 +502,7 @@ def _make_lcmv(
         pca=False,
         **depth,
     )
+    del noise_rank
 
     ch_names = list(info["ch_names"])
 
@@ -671,10 +669,6 @@ def _compute_beamformer(
 
     del G, orient_std
 
-    pinv_kwargs = dict()
-    if mne.utils.check_version("numpy", "1.17"):
-        pinv_kwargs["hermitian"] = True
-
     mne.utils._check_option("reduce_rank", reduce_rank, (True, False))
 
     # inversion of the denominator
@@ -725,6 +719,7 @@ def _compute_beamformer(
     # 2. Reorient lead field in direction of max power or normal
     # ----------------------------------------------------------
 
+    # MWW
     if pick_ori == "max-power" or pick_ori == "max-power-pre-weight-norm":
         assert n_orient == 3
         _, bf_denom = _compute_bf_terms(Gk, Cm_inv)

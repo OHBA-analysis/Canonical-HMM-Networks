@@ -291,3 +291,10 @@ def _gesd(X, alpha, p_out=1, outlier_side=0):
     mask = np.zeros(n).astype(bool)
     mask[rm_idx[np.where(R > lam)[0]]] = True
     return mask
+
+def ica_ICLabel():
+    """
+    ICLabel: An automated electroencephalographic independent component classifier, dataset, and website
+    https://doi.org/10.1016/j.neuroimage.2019.05.026
+    """
+    pass

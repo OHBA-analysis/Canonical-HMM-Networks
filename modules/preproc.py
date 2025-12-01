@@ -3,7 +3,8 @@
 import mne
 import numpy as np
 from scipy import stats
-
+from mne.preprocessing import ICA
+from mne_icalabel import label_components
 
 def detect_bad_segments(
     raw,
@@ -292,9 +293,139 @@ def _gesd(X, alpha, p_out=1, outlier_side=0):
     mask[rm_idx[np.where(R > lam)[0]]] = True
     return mask
 
-def ica_ICLabel():
+
+import numpy as np
+import matplotlib.pyplot as plt
+from mne.preprocessing import ICA
+from mne_icalabel import label_components
+
+def ica_ICLabel(
+    raw, 
+    picks='eeg', 
+    n_components=15, 
+    method='iclabel', 
+    threshold=0.0
+):
     """
-    ICLabel: An automated electroencephalographic independent component classifier, dataset, and website
-    https://doi.org/10.1016/j.neuroimage.2019.05.026
+    使用 ICA 和自动标记算法 (ICLabel 或 MEGNet) 进行自动伪影去除。
+    
+    支持 EEG (ICLabel) 和 MEG (MEGNet) 数据，并允许设置置信度阈值。
+
+    Parameters
+    ----------
+    raw : mne.io.Raw
+        MNE Raw 对象。
+    picks : str or list of str
+        用于 ICA 的通道类型。
+        - 对于 EEG 数据，通常使用 'eeg'。
+        - 对于 MEG 数据，可以使用 'meg', 'mag', 'grad' 等。
+    n_components : int, optional
+        用于 ICA 分解的 PCA 成分数量。默认为 15。
+    method : str, optional
+        标记方法。
+        - 'iclabel': 适用于 EEG 数据。
+        - 'megnet': 适用于 MEG 数据。
+        默认为 'iclabel'。
+    threshold : float, optional
+        置信度阈值 (0.0 到 1.0)。
+        只有当成分被标记为伪影 (非 brain/other) 且预测概率大于此阈值时，
+        才会被去除。默认为 0.0 (即只要标记为伪影就去除)。
+
+    Returns
+    -------
+    raw : mne.io.Raw
+        清洗后的 Raw 对象（原地修改）。
     """
-    pass
+    print()
+    print(f"ICA 自动伪影去除 (Method: {method})")
+    print("----------------------------")
+
+    # 1. 创建用于 ICA 拟合的副本
+    # 为了获得最佳的 ICA 分解效果，通常建议进行 1Hz 高通滤波。
+    # 我们在一个副本上进行此操作，以免改变原始数据的滤波设置。
+    print("正在过滤数据副本 (1-100Hz) 以进行 ICA 拟合...")
+    raw_fit = raw.copy().filter(l_freq=1.0, h_freq=100.0, verbose=False)
+
+    # 如果是 ICLabel (EEG)，必须应用平均参考
+    if method == 'iclabel':
+        print("应用平均参考 (ICLabel 要求)...")
+        raw_fit.set_eeg_reference("average", verbose=False)
+    
+    # 2. 拟合 ICA (扩展 Infomax)
+    print(f"正在拟合 ICA (method='infomax', n_components={n_components}, picks={picks})...")
+    ica = ICA(
+        n_components=n_components,
+        method="infomax",
+        fit_params=dict(extended=True),
+        random_state=97,
+        verbose=False,
+    )
+    ica.fit(raw_fit, picks=picks)
+
+    # 3. 使用指定方法标记成分
+    print(f"正在使用 {method} 标记成分...")
+    try:
+        ic_labels = label_components(raw_fit, ica, method=method)
+    except Exception as e:
+        print(f"标记失败: {e}")
+        return raw
+
+    labels = ic_labels["labels"]
+    probs = ic_labels["y_pred_proba"] # 获取预测概率
+
+    # 4. 识别坏成分 (结合标签和置信度阈值)
+    exclude_idx = []
+    print(f"正在筛选伪影成分 (阈值 > {threshold:.2f})...")
+    
+    for idx, (label, prob) in enumerate(zip(labels, probs)):
+        # 排除 "brain" (脑电) 和 "other" (其他/未知)
+        if label not in ["brain", "other"]:
+            # 只有当置信度高于设定的阈值时才标记为去除
+            if prob > threshold:
+                exclude_idx.append(idx)
+                print(f"  ICA{idx:03d}: {label} (置信度: {prob:.2f}) -> [标记去除]")
+            else:
+                print(f"  ICA{idx:03d}: {label} (置信度: {prob:.2f}) -> [保留] (置信度低于阈值)")
+        else:
+            # 如果是 brain 或 other，也可以打印一下以供参考
+            # print(f"  ICA{idx:03d}: {label} (置信度: {prob:.2f}) -> [保留]")
+            pass
+
+    # 5. 绘制被去除的成分 (带标签和置信度)
+    if len(exclude_idx) > 0:
+        print(f"总计发现 {len(exclude_idx)} 个待去除的伪影成分。正在绘图...")
+        
+        # 使用 MNE 的 plot_components 生成图像
+        title = f"Removed Artifacts ({method}, thresh={threshold})"
+        fig = ica.plot_components(picks=exclude_idx, title=title, show=False)
+        
+        # 兼容性处理
+        if isinstance(fig, list):
+            fig = fig[0]
+            
+        # 修改子图标题
+        topo_axes = [ax for ax in fig.axes if ax.get_title().startswith("ICA")]
+        
+        # 确保轴的数量匹配，避免索引错误
+        if len(topo_axes) == len(exclude_idx):
+            for i, ax in enumerate(topo_axes):
+                comp_idx = exclude_idx[i]
+                label_name = labels[comp_idx]
+                label_prob = probs[comp_idx]
+                
+                # 标题格式: ICA001 \n Eye blink (0.99)
+                new_title = f"ICA{comp_idx:03d}\n{label_name} ({label_prob:.2f})"
+                ax.set_title(new_title, fontsize=10, fontweight='bold')
+        
+        plt.show()
+    else:
+        print("未发现满足条件的伪影成分。")
+
+    # 6. 将清洗应用到原始数据
+    if len(exclude_idx) > 0:
+        print("正在将 ICA 清洗应用到原始数据...")
+        ica.apply(raw, exclude=exclude_idx)
+    else:
+        print("没有成分被去除，数据保持原样。")
+
+    return raw

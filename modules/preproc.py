@@ -297,13 +297,14 @@ def _gesd(X, alpha, p_out=1, outlier_side=0):
 def ica_ICLabel(
     raw, 
     picks='eeg', 
-    n_components=15, 
+    n_components=30, 
     method='iclabel', 
     threshold=0.0
 ):
     """
     Automatic artifact removal using ICA and automatic labeling algorithms (ICLabel or MEGNet).
-    
+    website: https://mne.tools/mne-icalabel/stable/index.html
+    paper: https://doi.org/10.1016/j.neuroimage.2019.05.026
     Supports EEG (ICLabel) and MEG (MEGNet) data, and allows setting a confidence threshold.
 
     Parameters

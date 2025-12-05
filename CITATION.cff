@@ -7,9 +7,9 @@ authors:
   - family-names: Woolrich
     given-names: Mark W.
 repository-code: https://github.com/OHBA-analysis/Canonical-HMM-Networks
-doi: 10.5281/zenodo.17651442
-url: https://zenodo.org/records/17651442
+doi: 10.5281/zenodo.17778927
+url: https://zenodo.org/records/17778927
 version: 0.1.1
-date-released: 2025-11-11
+date-released: 2025-12-01
 license: MIT
 type: software

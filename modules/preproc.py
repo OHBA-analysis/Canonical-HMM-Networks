@@ -90,7 +90,7 @@ def detect_bad_segments(
             stop = starts[i] + window_length
         m = metric_func(data[:, start:stop])
         metrics.append(m)
-        indices += [i] * len(data[:, start:stop])
+        indices += [i] * data[:, start:stop].shape[1]
 
     # Detect outliers
     bad_metrics_mask = _gesd(metrics, alpha=significance_level, p_out=maximum_fraction)
@@ -100,10 +100,10 @@ def detect_bad_segments(
     bad = np.isin(indices, bad_metrics_indices)
 
     # Make lists containing the start and end (index) of end bad segment
-    onsets = np.where(np.diff(bad.astype(float)) == 1)[0]
+    onsets = np.where(np.diff(bad.astype(float)) == 1)[0] + 1
     if bad[0]:
         onsets = np.r_[0, onsets]
-    offsets = np.where(np.diff(bad.astype(float)) == -1)[0]
+    offsets = np.where(np.diff(bad.astype(float)) == -1)[0] + 1
     if bad[-1]:
         offsets = np.r_[offsets, len(bad) - 1]
     assert len(onsets) == len(offsets)

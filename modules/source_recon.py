@@ -29,17 +29,12 @@ def lcmv_beamformer(
     chantypes=None,
     data_cov=None,
     noise_cov=None,
-    reg=0,
-    label=None,
     pick_ori="max-power-pre-weight-norm",
     rank="info",
     noise_rank="info",
-    weight_norm="unit-noise-gain-invariant",
     reduce_rank=True,
-    depth=None,
-    inversion="matrix",
     frequency_range=None,
-    verbose=None,
+    **kwargs,
 ):
     """Compute LCMV spatial filter.
 
@@ -61,94 +56,63 @@ def lcmv_beamformer(
         The noise covariance matrix used to whiten.
         If None will be computed from data as a diagonal matrix with variances
         set to the average of all sensors of that type.
-    reg : float
-        The regularization for the whitened data covariance.
-    label : instance of Label
-        Restricts the LCMV solution to a given label.
     pick_ori : None | 'normal' | 'max-power' | max-power-pre-weight-norm
         The source orientation to compute the beamformer in.
-    rank : dict | None | 'full' | 'info'
-        This controls the rank computation that can be read from the measurement
-        info or estimated from the data. When a noise covariance is used for
-        whitening, this should reflect the rank of that covariance, otherwise
-        amplification of noise components can occur in whitening (e.g., often
-        during source localization).
-
-        ``None``
-            The rank will be estimated from the data after proper scaling of
-            different channel types.
-
-        ``'info'``
-            The rank is inferred from info. If data have been processed with
-            Maxwell filtering, the Maxwell filtering header is used. Otherwise,
-            the channel counts themselves are used. In both cases, the number of
-            projectors is subtracted from the (effective) number of channels in
-            the data. For example, if Maxwell filtering reduces the rank to 68,
-            with two projectors the returned value will be 66.
-
-        ``'full'``
-            The rank is assumed to be full, i.e. equal to the number of good
-            channels. If a Covariance is passed, this can make sense if it has
-            been (possibly improperly) regularized without taking into account
-            the true data rank.
-
-        dict
-            Calculate the rank only for a subset of channel types, and
-            explicitly specify the rank for the remaining channel types.
-            This can be extremely useful if you already know the rank of (part
-            of) your data, for instance in case you have calculated it earlier.
-            This parameter must be a dictionary whose keys correspond to channel
-            types in the data (e.g. 'meg', 'mag', 'grad', 'eeg'), and whose
-            values are integers representing the respective ranks. For example,
-            {'mag': 90, 'eeg': 45} will assume a rank of 90 and 45 for
-            magnetometer data and EEG data, respectively.
-            The ranks for all channel types present in the data, but not
-            specified in the dictionary will be estimated empirically. That is,
-            if you passed a dataset containing magnetometer, gradiometer, and
-            EEG data together with the dictionary from the previous example,
-            only the gradiometer rank would be determined, while the specified
-            magnetometer and EEG ranks would be taken for granted.
-
-        The default is ``'info'``.
+    rank : dict
+        Calculate the rank only for a subset of channel types, and
+        explicitly specify the rank for the remaining channel types.
+        This can be extremely useful if you already know the rank of (part
+        of) your data, for instance in case you have calculated it earlier.
+        This parameter must be a dictionary whose keys correspond to channel
+        types in the data (e.g. 'meg', 'mag', 'grad', 'eeg'), and whose
+        values are integers representing the respective ranks. For example,
+        {'mag': 90, 'eeg': 45} will assume a rank of 90 and 45 for
+        magnetometer data and EEG data, respectively.
+        The ranks for all channel types present in the data, but not
+        specified in the dictionary will be estimated empirically. That is,
+        if you passed a dataset containing magnetometer, gradiometer, and
+        EEG data together with the dictionary from the previous example,
+        only the gradiometer rank would be determined, while the specified
+        magnetometer and EEG ranks would be taken for granted.
     noise_rank : dict | None | 'full' | 'info'
         This controls the rank computation that can be read from the measurement
         info or estimated from the data. When a noise covariance is used for
         whitening, this should reflect the rank of that covariance, otherwise
         amplification of noise components can occur in whitening (e.g., often
         during source localization).
-    weight_norm : None | 'unit-noise-gain' | 'unit-noise-gain-invariant' | 'nai'
-        The weight normalization scheme to use.
     reduce_rank : bool
         Whether to reduce the rank by one during computation of the filter.
-    depth : None | float | dict
-        How to weight (or normalize) the forward using a depth prior (see MNE docs).
-    inversion : 'matrix' | 'single'
-        The inversion scheme to compute the weights.
-    frequency_range : list, optional
+    frequency_range : list
         Lower and upper range (in Hz) for frequency range to bandpass filter.
         If None, no filtering is performed.
+    **kwargs : keyword arguments
+        Keyword arguments that will be passed to mne.beamformer.make_lcmv.
 
     Returns
     -------
     filters : instance of mne.beamformer.Beamformer
-        Dictionary containing filter weights from LCMV beamformer. See MNE docs.
+        Dictionary containing filter weights from LCMV beamformer.
+        See: https://mne.tools/stable/generated/mne.beamformer.make_lcmv.html
     """
     print("")
     print("Making LCMV beamformer")
     print("----------------------")
 
-    # Load data
     if data is None:
         data = fns.preproc_file
 
+    if chantypes is None:
+        raise ValueError("chantypes must be passed.")
+
+    if isinstance(chantypes, str):
+        chantypes = [chantypes]
+
+    # Load data
     if isinstance(data, str):
         if "epo.fif" in data:
             data = mne.read_epochs(data)
         else:
             data = mne.io.read_raw_fif(data)
-
-    if isinstance(chantypes, str):
-        chantypes = [chantypes]
 
     # Bandpass filter
     if frequency_range is not None:
@@ -174,30 +138,25 @@ def lcmv_beamformer(
         #
         # Prior to computing anything, including the subspaces each of mag, grad,
         # eeg are scaled so that they are on comparable scales to aid mixing in
-        # the subspace and improve numerical stability. This is equivalent to
-        # what the osl_normalise_sensor_data.m function in Matlab OSL is trying
-        # to do. Note that in the output data_cov the scalings have been undone.
+        # the subspace and improve numerical stability. Note that in the
+        # output data_cov the scalings have been undone.
         if isinstance(data, mne.Epochs):
-            data_cov = mne.compute_covariance( data, method="empirical", rank=rank)
+            data_cov = mne.compute_covariance(data, method="empirical", rank=rank)
         else:
             data_cov = mne.compute_raw_covariance(data, method="empirical", rank=rank)
 
     if noise_cov is None:
-        if chantypes is None:
-            raise ValueError("chantypes must be passed.")
-
         # Calculate noise covariance matrix
         #
         # Later this will be inverted and used to whiten the data AND the lead
         # fields as part of the source recon. See:
         #
-        #   https://www.sciencedirect.com/science/article/pii/S1053811914010325?via%3Dihub
+        #   https://www.sciencedirect.com/science/article/pii/S1053811914010325
         #
         # In MNE, the noise cov is normally obtained from empty room noise
         # recordings or from a baseline period. Here (if no noise cov is passed
-        # in) we mimic what the osl_normalise_sensor_data.m function in Matlab
-        # OSL does, by computing a diagonal noise cov with the variances set to
-        # the mean variance of each sensor type (e.g. mag, grad, eeg.)
+        # in) we compute a diagonal noise cov with the variances set to the mean
+        # variance of each sensor type (e.g. mag, grad, eeg).
         n_channels = data_cov.data.shape[0]
         noise_cov_diag = np.zeros(n_channels)
         for type in chantypes:
@@ -227,13 +186,11 @@ def lcmv_beamformer(
         fwd,
         data_cov,
         noise_cov=noise_cov,
-        reg=reg,
         pick_ori=pick_ori,
-        weight_norm=weight_norm,
         rank=rank,
         noise_rank=noise_rank,
         reduce_rank=reduce_rank,
-        verbose=verbose,
+        **kwargs,
     )
 
     print(f"Saving {fns.filters}")
@@ -363,6 +320,8 @@ def apply_lcmv_beamformer(
         if dist < spatial_resolution:
             voxel_data_mni_resampled[cc] = voxel_data_head[index]
 
+    print("Applying LCMV beamformer complete.")
+
     return voxel_data_mni_resampled, voxel_coords_mni_resampled
 
 
@@ -402,50 +361,23 @@ def _make_lcmv(
         Restricts the LCMV solution to a given label.
     pick_ori : None | 'normal' | 'max-power' | max-power-pre-weight-norm
         The source orientation to compute the beamformer in.
-    rank : dict | None | 'full' | 'info'
-        This controls the rank computation that can be read from the measurement
-        info or estimated from the data. When a noise covariance is used for
-        whitening, this should reflect the rank of that covariance, otherwise
-        amplification of noise components can occur in whitening (e.g., often
-        during source localization).
-
-        ``None``
-            The rank will be estimated from the data after proper scaling of
-            different channel types.
-
-        ``'info'``
-            The rank is inferred from info. If data have been processed with
-            Maxwell filtering, the Maxwell filtering header is used. Otherwise,
-            the channel counts themselves are used. In both cases, the number of
-            projectors is subtracted from the (effective) number of channels in
-            the data. For example, if Maxwell filtering reduces the rank to 68,
-            with two projectors the returned value will be 66.
-
-        ``'full'``
-            The rank is assumed to be full, i.e. equal to the number of good
-            channels. If a Covariance is passed, this can make sense if it has
-            been (possibly improperly) regularized without taking into account
-            the true data rank.
-
-        dict
-            Calculate the rank only for a subset of channel types, and
-            explicitly specify the rank for the remaining channel types.
-            This can be extremely useful if you already know the rank of (part
-            of) your data, for instance in case you have calculated it earlier.
-            This parameter must be a dictionary whose keys correspond to channel
-            types in the data (e.g. 'meg', 'mag', 'grad', 'eeg'), and whose
-            values are integers representing the respective ranks. For example,
-            {'mag': 90, 'eeg': 45} will assume a rank of 90 and 45 for
-            magnetometer data and EEG data, respectively.
-            The ranks for all channel types present in the data, but not
-            specified in the dictionary will be estimated empirically. That is,
-            if you passed a dataset containing magnetometer, gradiometer, and
-            EEG data together with the dictionary from the previous example,
-            only the gradiometer rank would be determined, while the specified
-            magnetometer and EEG ranks would be taken for granted.
-
-        The default is ``'info'``.
-    noise_rank : dict | None | 'full' | 'info'
+    rank : dict
+        Calculate the rank only for a subset of channel types, and
+        explicitly specify the rank for the remaining channel types.
+        This can be extremely useful if you already know the rank of (part
+        of) your data, for instance in case you have calculated it earlier.
+        This parameter must be a dictionary whose keys correspond to channel
+        types in the data (e.g. 'meg', 'mag', 'grad', 'eeg'), and whose
+        values are integers representing the respective ranks. For example,
+        {'mag': 90, 'eeg': 45} will assume a rank of 90 and 45 for
+        magnetometer data and EEG data, respectively.
+        The ranks for all channel types present in the data, but not
+        specified in the dictionary will be estimated empirically. That is,
+        if you passed a dataset containing magnetometer, gradiometer, and
+        EEG data together with the dictionary from the previous example,
+        only the gradiometer rank would be determined, while the specified
+        magnetometer and EEG ranks would be taken for granted.
+    noise_rank : dict
         This controls the rank computation that can be read from the measurement
         info or estimated from the data. When a noise covariance is used for
         whitening, this should reflect the rank of that covariance, otherwise
@@ -483,10 +415,8 @@ def _make_lcmv(
     data_rank = mne.rank.compute_rank(data_cov, rank=rank, info=info)
     noise_rank = mne.rank.compute_rank(noise_cov, rank=noise_rank, info=info)
 
-    rank = data_rank
-    mne_logger.info(f"Making LCMV beamformer with data cov rank {rank}")
+    mne_logger.info(f"Making LCMV beamformer with data cov rank {data_rank}")
     mne_logger.info(f"Making LCMV beamformer with noise cov rank {noise_rank}")
-    del data_rank
 
     depth = _check_depth(depth, "depth_sparse")
     if inversion == "single":
@@ -510,8 +440,8 @@ def _make_lcmv(
     Cm = data_cov._get_square()
     if "estimator" in data_cov:
         del data_cov["estimator"]
-    rank_int = sum(rank.values())
-    del rank
+    rank_int = sum(data_rank.values())
+    del data_rank
 
     # Compute spatial filter
     n_orient = 3 if is_free_ori else 1
@@ -719,7 +649,6 @@ def _compute_beamformer(
     # 2. Reorient lead field in direction of max power or normal
     # ----------------------------------------------------------
 
-    # MWW
     if pick_ori == "max-power" or pick_ori == "max-power-pre-weight-norm":
         assert n_orient == 3
         _, bf_denom = _compute_bf_terms(Gk, Cm_inv)
@@ -742,7 +671,8 @@ def _compute_beamformer(
 
         else:
             # MWW
-            # Compute power
+            #
+            # Compute orientation based on pre-normalised power
             #
             # See eq 5 in Brookes et al, Optimising experimental design for
             # MEG beamformer imaging, Neuroimage 2008. This optimises the

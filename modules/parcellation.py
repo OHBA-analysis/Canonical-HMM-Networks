@@ -597,6 +597,8 @@ def _convert2mne_raw(parc_data, raw, parcel_names=None, extra_chans="stim"):
         Generated parcellation in mne.Raw format.
     """
     # What extra channels should we add to the parc_raw object?
+    if extra_chans is None:
+        extra_chans = []
     if isinstance(extra_chans, str):
         extra_chans = [extra_chans]
     extra_chans = np.unique(["stim"] + extra_chans)

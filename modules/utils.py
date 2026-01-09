@@ -174,8 +174,6 @@ def convert_notts_opm_files_to_fif(
     sensor_oris = chan_info.iloc[:, 7:10].to_numpy().T
     sensor_bads = chan_info.iloc[:, 3].to_numpy().T
 
-    # import pdb; pdb.set_trace()
-
     # Need to undo orginal sform on sensor locs and oris and then apply new sform
     smri = nib.load(smri_file)
     overall_xform = sform_std_fixed @ np.linalg.pinv(smri.header.get_sform())
@@ -197,8 +195,6 @@ def convert_notts_opm_files_to_fif(
     # -------------------------------------------
 
     Fs = scipy.io.loadmat(mat_file)["fs"][0, 0]  # Hz
-
-    # see https://mne.tools/stable/auto_tutorials/simulation/10_array_objs.html
 
     info = mne.create_info(ch_names=sensor_names.tolist(), ch_types="mag", sfreq=Fs)
 

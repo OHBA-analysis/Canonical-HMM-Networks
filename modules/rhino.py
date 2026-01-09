@@ -574,7 +574,7 @@ def coregister(
     use_headshape=True,
     use_dev_ctf_t=True,
     allow_smri_scaling=False,
-    opm=False,
+    already_coregistered=False,
     mni_fiducials=None,
     n_init=1,
 ):
@@ -640,8 +640,13 @@ def coregister(
         E.g. this might be the case if we do not trust the size (e.g. in mm)
         of the sMRI, or if we are using a template sMRI that has not come from
         this subject.
-    opm : bool, optional
-        Are we coregistering OPM data?
+    already_coregistered : bool, optional
+        Indicates that the data is already coregistered. Causes a simplified
+        coreg to be run that assumes that device space, head space and mri space
+        are all the same space, and that the sensor locations and polhemus points
+        (if there are any) are already in that space. This means that dev_head_t
+        is identity and that dev_mri_t is identity. This simplified coreg is
+        needed to ensure that all the necessary coreg output files are created.
     mni_fiducials : list, optional
         Fiducials for the MRI in MNI space. Must be [nasion, rpa, lpa],
         where nasion, rpa, lpa are 3D coordinates.
@@ -685,7 +690,7 @@ def coregister(
     raw = mne.io.RawArray(np.zeros([len(info["ch_names"]), 1]), info)
     raw.save(cfns.info_fif_file, overwrite=True)
 
-    if opm:
+    if already_coregistered:
         # Data is already coregistered.
 
         # Assumes that device space, head space and mri space are all the same
@@ -971,7 +976,7 @@ def coregister(
     # -----------------------
     # Plot the coregistration
     # -----------------------
-    if opm:
+    if already_coregistered:
         plot_coregistration(
             fns,
             display_sensors=False,

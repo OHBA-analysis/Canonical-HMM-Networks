@@ -2009,11 +2009,13 @@ def _make_fwd_solution(
 
 
 def _get_orient(nii_file):
+    """Get orientation of nii file."""
     cmd = f"fslorient -getorient {nii_file}"
     return os.popen(cmd).read().strip()
 
 
 def _get_sform(nii_file):
+    """Get sform of nii file."""
     sformcode = int(nib.load(nii_file).header["sform_code"])
     if sformcode == 1 or sformcode == 4:
         sform = nib.load(nii_file).header.get_sform()
@@ -2026,12 +2028,48 @@ def _get_sform(nii_file):
 
 
 def _check_nii_for_nan(filename):
+    """Check nii file for nans."""
     img = nib.load(filename)
     data = img.get_fdata()
     return np.isnan(data).any()
 
 
 def _get_flirt_xform_between_axes(from_nii, target_nii):
+    """
+    Computes flirt xform that moves from_nii to have voxel indices on the same
+    axis as  the voxel indices for target_nii.
+
+    Note that this is NOT the same as registration, i.e. the images are not aligned.
+    In fact the actual coordinates (in mm) are unchanged.
+
+    It is instead about putting from_nii onto the same axes so that the voxel INDICES
+    are comparable. This is achieved by using a transform that sets the sform of
+    from_nii to be the same as target_nii without changing the actual coordinates
+    (in mm). Transform needed to do this is:
+
+      from2targetaxes = inv(targetvox2target) * fromvox2from
+
+    In more detail, we need the sform for the transformed from_nii to be the same as
+    the sform for the target_nii, without changing the actual coordinates (in mm).
+
+    In other words, we need:
+
+        fromvox2from * from_nii_vox = targetvox2target * from_nii_target_vox
+
+    where
+    - fromvox2from is sform for from_nii (i.e. converts from voxel indices to
+      voxel coords in mm)
+    - targetvox2target is sform for target_nii
+    - from_nii_vox are the voxel indices for from_nii
+    - from_nii_target_vox are the voxel indices for from_nii when transformed onto
+      the target axis.
+
+    => from_nii_target_vox = from2targetaxes * from_nii_vox
+
+    where
+    - from2targetaxes = inv(targetvox2target) * fromvox2from
+    """
+
     to2tovox = np.linalg.inv(_get_sform(target_nii)["trans"])
     fromvox2from = _get_sform(from_nii)["trans"]
     from2to = to2tovox @ fromvox2from
@@ -2039,6 +2077,13 @@ def _get_flirt_xform_between_axes(from_nii, target_nii):
 
 
 def _get_mne_xform_from_flirt_xform(flirt_xform, nii_mesh_file_in, nii_mesh_file_out):
+    """
+    Returns a mm coordinates to mm coordinates MNE xform that corresponds to
+    the passed in flirt xform.
+
+    Note that we need to do this as flirt xforms include an extra xform based
+    on the voxel dimensions (see get_flirtcoords2native_xform).
+    """
     flirtcoords2native_xform_in = _get_flirtcoords2native_xform(nii_mesh_file_in)
     flirtcoords2native_xform_out = _get_flirtcoords2native_xform(nii_mesh_file_out)
     return (
@@ -2049,6 +2094,26 @@ def _get_mne_xform_from_flirt_xform(flirt_xform, nii_mesh_file_in, nii_mesh_file
 
 
 def _get_flirtcoords2native_xform(nii_mesh_file):
+    """
+    Returns xform_flirtcoords2native transform that transforms from flirtcoords
+    space in mm into native space in mm, where the passed in nii_mesh_file specifies
+    the native space
+
+    Note that for some reason flirt outputs transforms of the form:
+    flirt_mni2mri = mri2flirtcoords x mni2mri x flirtcoords2mni
+
+    and bet_surf outputs the .vtk file vertex values in the same flirtcoords mm
+    coordinate system.
+
+    See the bet_surf manual:
+    https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/BET/UserGuide#betsurf
+
+    If the image has radiological ordering (see fslorient) then the mm co-ordinates
+    are the voxel co-ordinates scaled by the mm voxel sizes.
+
+    i.e. (x_mm = x_dim * x) where x_mm are the flirtcoords coords in mm, x is the
+    voxel co-ordinate and x_dim is the voxel size in mm.
+    """
     mri_orient = _get_orient(nii_mesh_file)
     if mri_orient != "RADIOLOGICAL":
         raise ValueError(
@@ -2068,6 +2133,16 @@ def _transform_vtk_mesh(
     nii_mesh_file_out,
     xform_file,
 ):
+    """
+    Outputs mesh to out_vtk_file, which is the result of applying the
+    transform xform to vtk_mesh_file_in
+
+    nii_mesh_file_in needs to be the corresponding niftii file from bet
+    that corresponds to the same mesh as in vtk_mesh_file_in
+
+    nii_mesh_file_out needs to be the corresponding niftii file from bet
+    that corresponds to the same mesh as in out_vtk_file
+    """
     rrs_in, tris_in = _get_vtk_mesh_native(vtk_mesh_file_in, nii_mesh_file_in)
     xform_flirtcoords2native_out = _get_flirtcoords2native_xform(nii_mesh_file_out)
     if isinstance(xform_file, str):
@@ -2096,6 +2171,20 @@ def _get_vtk_mesh_native(vtk_mesh_file, nii_mesh_file):
 
 
 def _xform_points(xform, pnts):
+    """Applies homogenous linear transformation to an array of 3D coordinates.
+
+    Parameters
+    ----------
+    xform : numpy.ndarray
+        4x4 matrix containing the affine transform.
+    pnts : numpy.ndarray
+        points to transform, should be 3 x num_points.
+
+    Returns
+    -------
+    newpnts : numpy.ndarray
+        pnts following the xform, will be 3 x num_points.
+    """
     if len(pnts.shape) == 1:
         pnts = np.reshape(pnts, [-1, 1])
     num_rows, num_cols = pnts.shape
@@ -2107,6 +2196,28 @@ def _xform_points(xform, pnts):
 
 
 def _rigid_transform_3D(B, A, compute_scaling=False):
+    """Calculate affine transform from points in A to point in B.
+
+    Parameters
+    ----------
+    A : numpy.ndarray
+        3 x num_points. Set of points to register from.
+    B : numpy.ndarray
+        3 x num_points. Set of points to register to.
+
+    compute_scaling : bool
+        Do we compute a scaling on top of rotation and translation?
+
+    Returns
+    -------
+    xform : numpy.ndarray
+        Calculated affine transform, does not include scaling.
+    scaling_xform : numpy.ndarray
+        Calculated scaling transform (a diagonal 4x4 matrix),
+        does not include rotation or translation.
+
+    see http://nghiaho.com/?page_id=671
+    """
     assert A.shape == B.shape
     num_rows, num_cols = A.shape
     if num_rows != 3:
@@ -2140,6 +2251,21 @@ def _rigid_transform_3D(B, A, compute_scaling=False):
 
 
 def _niimask2indexpointcloud(nii_fname, volindex=None):
+    """Takes in a nii.gz mask file name (which equals zero for background
+    and != zero for the mask) and returns the mask as a 3 x npoints point cloud.
+
+    Parameters
+    ----------
+    nii_fname : string
+        A nii.gz mask file name (with zero for background, and !=0 for the mask).
+    volindex : int
+        Volume index, used if nii_mask is a 4D file.
+
+    Returns
+    -------
+    pc : numpy.ndarray
+        3 x npoints point cloud as voxel indices.
+    """
     vol = nib.load(nii_fname).get_fdata()
     if len(vol.shape) == 4 and volindex is not None:
         vol = vol[:, :, :, volindex]
@@ -2152,6 +2278,26 @@ def _niimask2indexpointcloud(nii_fname, volindex=None):
 
 
 def _rhino_icp(mri_headshape_head, polhemus_headshape_head, n_init=10):
+    """Runs Iterative Closest Point (ICP) with multiple initialisations.
+
+    Parameters
+    ----------
+    smri_headshape_polhemus : numpy.ndarray
+        [3 x N] locations of the headshape points from MRI in HEAD space
+    polhemus_headshape_polhemus : numpy.ndarray
+        [3 x N] locations of the headshape points from polhemus in HEAD space.
+    n_init : int
+        Number of random initialisations to perform.
+
+    Returns
+    -------
+    xform : numpy.ndarray
+        [4 x 4] rigid transformation matrix mapping data2 to data.
+
+    Notes
+    -----
+    Based on Matlab version from Adam Baker 2014.
+    """
     data1 = mri_headshape_head
     data2 = polhemus_headshape_head
     err_old = np.inf
@@ -2204,6 +2350,35 @@ def _rhino_icp(mri_headshape_head, polhemus_headshape_head, n_init=10):
 
 
 def _icp(A, B, init_pose=None, max_iterations=50, tolerance=0.0001):
+    """The Iterative Closest Point method:
+    finds best-fit transform that maps points A on to points B.
+
+    Parameters
+    ----------
+    A : numpy.ndarray
+        Nxm numpy array of source mD points.
+    B : numpy.ndarray
+        Nxm numpy array of destination mD point.
+    init_pose : numpy.ndarray
+        (m+1)x(m+1) homogeneous transformation.
+    max_iterations : int
+        Exit algorithm after max_iterations.
+    tolerance : float
+        Convergence criteria.
+
+    Returns
+    -------
+    T : numpy.ndarray
+        (4 x 4) Final homogeneous transformation that maps A on to B.
+    distances : numpy.ndarray
+        Euclidean distances (errors) of the nearest neighbor.
+    i : float
+        Number of iterations to converge.
+
+    Notes
+    -----
+    From: https://github.com/ClayFlannigan/icp/blob/master/icp.py
+    """
     m = A.shape[1]
     src = np.ones((m + 1, A.shape[0]))
     dst = np.ones((m + 1, B.shape[0]))
@@ -2226,6 +2401,21 @@ def _icp(A, B, init_pose=None, max_iterations=50, tolerance=0.0001):
 
 
 def _best_fit_transform(A, B):
+    """Calculates the least-squares best-fit transform that maps corresponding
+    points A to B in m spatial dimensions.
+
+    Parameters
+    ----------
+    A : numpy.ndarray
+        Nxm numpy array of corresponding points.
+    B : numpy.ndarray
+        Nxm numpy array of corresponding points.
+
+    Outputs
+    -------
+    T : numpy.ndarray
+        (m+1)x(m+1) homogeneous transformation matrix that maps A on to B.
+    """
     assert A.shape == B.shape
     m = A.shape[1]
     centroid_A = np.mean(A, axis=0)
@@ -2246,6 +2436,10 @@ def _best_fit_transform(A, B):
 
 
 def _create_freesurfer_meshes_from_bet_surfaces(fns, xform_mri_voxel2mri):
+    """
+    Create sMRI-derived freesurfer surfaces in native/mri space in mm,
+    for use by forward modelling
+    """
     _create_freesurfer_mesh_from_bet_surface(
         infile=fns.bet_inskull_mesh_vtk_file,
         surf_outfile=fns.bet_inskull_surf_file,
@@ -2366,6 +2560,19 @@ def _create_freesurfer_mesh_from_bet_surface(
 
 
 def _get_vol_info_from_nii(mri):
+    """Read volume info from an MRI file.
+
+    Parameters
+    ----------
+    mri : str
+        Path to MRI file.
+
+    Returns
+    -------
+    out : dict
+        Dictionary with keys 'mri_width', 'mri_height', 'mri_depth'
+        and 'mri_volume_name'.
+    """
     dims = nib.load(mri).get_fdata().shape
     return dict(
         mri_width=dims[0],
@@ -2377,6 +2584,18 @@ def _get_vol_info_from_nii(mri):
 
 @cfunc(intc(CPointer(float64), intp, CPointer(float64), voidptr))
 def _majority(values_ptr, len_values, result, data):
+    """
+    def _majority(buffer, required_majority):
+       return buffer.sum() >= required_majority
+
+    See: https://ilovesymposia.com/2017/03/12/scipys-new-lowlevelcallable-is-a-game-changer/
+
+    Numba cfunc that takes in:
+    a double pointer pointing to the values within the footprint,
+    a pointer-sized integer that specifies the number of values in the footprint,
+    a double pointer for the result, and
+    a void pointer, which could point to additional parameters
+    """
     values = carray(values_ptr, (len_values,), dtype=float64)
     required_majority = 14  # in 3D we have 27 voxels in total
     result[0] = values.sum() >= required_majority
@@ -2384,6 +2603,11 @@ def _majority(values_ptr, len_values, result, data):
 
 
 def _binary_majority3d(img):
+    """
+    Set a pixel to 1 if a required majority (default=14) or more pixels
+    in its 3x3x3 neighborhood are 1, otherwise, set the pixel to 0. img
+    is a 3D binary image
+    """
     if img.dtype != "bool":
         raise ValueError("binary_majority3d(img) requires img to be binary")
     if len(img.shape) != 3:

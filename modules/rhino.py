@@ -13,6 +13,7 @@ import nilearn as nil
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from sklearn.mixture import GaussianMixture
+from skimage import measure
 from numba import cfunc, carray
 from numba.types import intc, intp, float64, voidptr, CPointer
 from scipy import ndimage, LowLevelCallable
@@ -188,9 +189,9 @@ def extract_surfaces(mri_file, outdir, include_nose=False, do_mri2mniaxes_xform=
             "Or try passing do_mri2mniaxes_xform=True."
         )
 
-    # -------------------------------------------------------
-    # 2) Use BET to skull strip MRI so that flirt works well
-    # -------------------------------------------------------
+    # ------------------------------------------------------
+    # 2) Use BET to skull strip MRI so that FLIRT works well
+    # ------------------------------------------------------
 
     # Check MRI doesn't contain nans
     # (this can cause segmentation faults with FSL's bet)
@@ -204,7 +205,7 @@ def extract_surfaces(mri_file, outdir, include_nose=False, do_mri2mniaxes_xform=
     fsl_wrappers.bet(flirt_mri_mniaxes_file, flirt_mri_mniaxes_bet_file)
 
     # ---------------------------------------------------------
-    # 3) Use flirt to register skull stripped MRI to MNI space
+    # 3) Use FLIRT to register skull stripped MRI to MNI space
     # ---------------------------------------------------------
 
     print("Running FLIRT...")
@@ -446,7 +447,7 @@ def extract_surfaces(mri_file, outdir, include_nose=False, do_mri2mniaxes_xform=
         # Command: fslcpgeom <src> <dest>
         fsl_wrappers.fslcpgeom(
             f"{flirt_outskin_bigfov_file}.nii.gz",
-            f"{flirt_outskin_bigfov_file}_plus_nose.nii.gz",
+            f"{flirt_outskin_bigfov_file}_plus_nose.nii.gz"
         )
 
         # Transform outskin plus nose nii mesh from MNI big FOV to MRI space
@@ -484,11 +485,11 @@ def extract_surfaces(mri_file, outdir, include_nose=False, do_mri2mniaxes_xform=
     write_trans(fns.mni_mri_t_file, mni_mri_t, overwrite=True)
 
     # ----------------------------------------
-    # 7) Output surfaces in MRI(native) space
+    # 7) Output surfaces in MRI (native) space
     # ----------------------------------------
 
     # Transform betsurf output mask/mesh output from MNI to MRI space
-    for mesh_name in {"outskin_mesh", "inskull_mesh", "outskull_mesh"}:
+    for mesh_name in ["outskin_mesh", "inskull_mesh", "outskull_mesh"]:
         # xform mask
         #
         # Command: flirt -in <flirt_mesh_file> -ref <mri_file> \
@@ -827,6 +828,7 @@ def save_coregistration_files(fns):
     for filename in [
         "mri_file",
         "bet_outskin_mesh_file",
+        "bet_outskin_plus_nose_mesh_file",
         "bet_inskull_mesh_file",
         "bet_outskull_mesh_file",
         "bet_outskin_mesh_vtk_file",
@@ -852,6 +854,7 @@ def save_coregistration_files(fns):
 def coregister_polhemus_mri(
     fns,
     use_headshape=True,
+    use_nose=False,
     allow_mri_scaling=False,
     mni_fiducials=None,
     n_init=1,
@@ -905,6 +908,9 @@ def coregister_polhemus_mri(
         Container for OSL filenames.
     use_headshape : bool, optional
         Determines whether polhemus derived headshape points are used.
+    use_nose : bool, optional
+        Determines whether nose is used to aid coregistration,
+        only relevant if use_headshape=True.
     allow_mri_scaling : bool, optional
         Indicates if we are to allow scaling of the MRI, such that the
         MRI-derived fiducials are scaled in size to better match the
@@ -937,12 +943,19 @@ def coregister_polhemus_mri(
     cfns = fns.coreg
     sfns = fns.surfaces
 
-    # --------------------------------------------------------------------
-    # Copy fif_file to new file for modification, and (optionally) changes
-    # dev_head_t to equal dev_ctf_t in fif file info
-    # --------------------------------------------------------------------
+    if not use_headshape:
+        use_nose = False
 
-    # Get info from fif file
+    if use_nose:
+        print("The MRI-derived nose is going to be used to aid coregistration.")
+        print("Please ensure that rhino.extract_surfaces was run with include_nose=True.")
+        print("Please ensure that the headshape points include the nose.")
+    else:
+        print("The MRI-derived nose is not going to be used to aid coregistration.")
+        print("Please ensure that the headshape points do not include the nose")
+
+    # Copy fif_file to new file for modification
+    # and change dev_head_t to equal dev_ctf_t in fif file info
     info = mne.io.read_info(fns.preproc_file)
 
     dev_ctf_t = info["dev_ctf_t"]
@@ -1048,6 +1061,7 @@ def coregister_polhemus_mri(
     for filename in [
         "mri_file",
         "bet_outskin_mesh_file",
+        "bet_outskin_plus_nose_mesh_file",
         "bet_inskull_mesh_file",
         "bet_outskull_mesh_file",
     ]:
@@ -1088,7 +1102,10 @@ def coregister_polhemus_mri(
     # --------------------------------------------------------------------
 
     # File containing the "MRI-derived headshape points"
-    outskin_mesh_file = cfns.bet_outskin_mesh_file
+    if use_nose:
+        outskin_mesh_file = cfns.bet_outskin_plus_nose_mesh_file
+    else:
+        outskin_mesh_file = cfns.bet_outskin_mesh_file
 
     # Get native (mri) voxel index to scaled native (mri) transform
     xform_nativeindex2scalednative = _get_sform(outskin_mesh_file)["trans"]
@@ -1202,7 +1219,7 @@ def coregister_polhemus_mri(
     # -----------------------
     # Plot the coregistration
     # -----------------------
-    plot_coregistration(fns)
+    plot_coregistration(fns, include_nose=use_nose)
 
     print("Coregistration complete.")
 
@@ -1214,6 +1231,7 @@ def plot_coregistration(
     display_sensor_oris=True,
     display_fiducials=True,
     display_headshape_pnts=True,
+    include_nose=False,
     filename=None,
     show=True,
 ):
@@ -1233,6 +1251,8 @@ def plot_coregistration(
         Whether to include fiducials in the display.
     display_headshape_pnts : bool, optional
         Whether to include headshape points in the display.
+    include_nose : bool, option
+        Should we use the outskin surface with the nose?
     filename : str, optional
         Filename to save display to (as an interactive html).
         Must have extension .html.
@@ -1259,6 +1279,9 @@ def plot_coregistration(
     bet_outskin_mesh_vtk_file = fns.bet_outskin_mesh_vtk_file
     bet_outskin_surf_file = fns.bet_outskin_surf_file
 
+    bet_outskin_plus_nose_mesh_file = fns.bet_outskin_plus_nose_mesh_file
+    bet_outskin_plus_nose_surf_file = fns.bet_outskin_plus_nose_surf_file
+
     head_scaledmri_t_file = fns.head_scaledmri_t_file
     mrivoxel_scaledmri_t_file = fns.mrivoxel_scaledmri_t_file
     mri_nasion_file = fns.mri_nasion_file
@@ -1270,9 +1293,14 @@ def plot_coregistration(
     head_headshape_file = fns.head_headshape_file
     info_fif_file = fns.info_fif_file
 
-    outskin_mesh_file = bet_outskin_mesh_file
-    outskin_mesh_4surf_file = bet_outskin_mesh_vtk_file
-    outskin_surf_file = bet_outskin_surf_file
+    if include_nose:
+        outskin_mesh_file = bet_outskin_plus_nose_mesh_file
+        outskin_mesh_4surf_file = bet_outskin_plus_nose_mesh_file
+        outskin_surf_file = bet_outskin_plus_nose_surf_file
+    else:
+        outskin_mesh_file = bet_outskin_mesh_file
+        outskin_mesh_4surf_file = bet_outskin_mesh_vtk_file
+        outskin_surf_file = bet_outskin_surf_file
 
     # ------------
     # Setup xforms
@@ -2239,12 +2267,92 @@ def _create_freesurfer_meshes_from_bet_surfaces(fns, xform_mri_voxel2mri):
 
 
 def _create_freesurfer_mesh_from_bet_surface(
-    infile, surf_outfile, xform_mri_voxel2mri, nii_mesh_file
+    infile,
+    surf_outfile,
+    xform_mri_voxel2mri,
+    nii_mesh_file=None,
 ):
+    """Creates surface mesh in .surf format and in native mri space in mm from infile.
+
+    Parameters
+    ----------
+    infile : str
+        Either:
+        1) .nii.gz file containing zero's for background and one's for surface
+        2) .vtk file generated by bet_surf (in which case the path to the
+        structural MRI, smri_file, must be included as an input)
+    surf_outfile : str
+        Path to the .surf file generated, containing the surface mesh in mm
+    xform_mri_voxel2mri : np.ndarray
+        4x4 array. Transform from voxel indices to native/mri mm.
+    nii_mesh_file : str, optional
+        Path to the niftii mesh file that is the niftii equivalent of vtk file
+        passed in as infile (only needed if infile is a vtk file).
+    """
     pth, name = os.path.split(infile)
     name, ext = os.path.splitext(name)
-    if ext == ".vtk":
+
+    if ext == ".gz":
+        print("Creating surface mesh for {} .....".format(infile))
+
+        name, ext = os.path.splitext(name)
+        if ext != ".nii":
+            raise ValueError("Invalid infile. Needs to be a .nii.gz or .vtk file")
+
+        # Load NIfTI and binarize
+        nii = nib.load(infile)
+        vol = nii.get_fdata()
+        # Ensure binary mask (0 background, >0 surface)
+        vol = (vol > 0).astype(np.uint8)
+
+        # Run marching cubes
+        # level=0.5 extracts the surface between 0 and 1
+        # spacing left as (1,1,1) because we will apply a full 4x4 transform below.
+        try:
+            verts_vox, faces, normals, values = measure.marching_cubes(
+                vol, level=0.5, spacing=(1.0, 1.0, 1.0)
+            )
+        except Exception as e:
+            raise RuntimeError(
+                "marching_cubes failed. Check that the NIfTI file is a "
+                "proper binary mask."
+            ) from e
+
+        if verts_vox.size == 0 or faces.size == 0:
+            raise RuntimeError(
+                "marching_cubes produced no vertices/faces. Check input volume/mask."
+            )
+
+        # verts_vox is (M,3) in voxel coordinates (voxel index space)
+        # Convert to homogeneous coordinates and apply the provided 4x4 transform
+        ones = np.ones((verts_vox.shape[0], 1), dtype=verts_vox.dtype)
+        verts_vox_h = np.hstack([verts_vox, ones])  # shape (M,4)
+
+        # Ensure xform is numpy array and has shape (4,4)
+        xform = np.asarray(xform_mri_voxel2mri)
+        if xform.shape != (4, 4):
+            raise ValueError("xform_mri_voxel2mri must be a 4x4 array")
+
+        verts_mm_h = (xform @ verts_vox_h.T).T  # (M,4)
+        verts_mm = verts_mm_h[:, :3]
+
+        # faces already has shape (F,3) and is integer
+        faces = faces.astype(int)
+
+        # Write FreeSurfer surface
+        mne.surface.write_surface(
+            surf_outfile, verts_mm, faces, file_format="freesurfer", overwrite=True
+        )
+
+    elif ext == ".vtk":
+        if nii_mesh_file is None:
+            raise ValueError(
+                "You must specify a nii_mesh_file (niftii format) "
+                "if infile format is vtk"
+            )
+
         rrs_native, tris_native = _get_vtk_mesh_native(infile, nii_mesh_file)
+
         mne.surface.write_surface(
             surf_outfile,
             rrs_native,
@@ -2252,8 +2360,9 @@ def _create_freesurfer_mesh_from_bet_surface(
             file_format="freesurfer",
             overwrite=True,
         )
+
     else:
-        raise ValueError("Invalid infile. Needs to be a .vtk file")
+        raise ValueError("Invalid infile. Needs to be a .nii.gz or .vtk file")
 
 
 def _get_vol_info_from_nii(mri):

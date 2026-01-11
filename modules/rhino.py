@@ -38,7 +38,7 @@ from mne.viz.backends.renderer import _get_renderer
 from . import utils
 
 
-def extract_surfaces(mri_file, outdir, include_nose=False, do_mri2mniaxes_xform=True):
+def extract_surfaces(mri_file, outdir, include_nose=True, do_mri2mniaxes_xform=True):
     """Extract surfaces.
 
     Extracts inner skull, outer skin (scalp) and brain surfaces from passed
@@ -522,7 +522,7 @@ def extract_surfaces(mri_file, outdir, include_nose=False, do_mri2mniaxes_xform=
     print("Surface extraction complete.")
 
 
-def plot_surfaces(outdir, id, include_nose=False):
+def plot_surfaces(outdir, id, include_nose=True):
     """Plot a structural MRI and extracted surfaces.
 
     Parameters
@@ -854,7 +854,7 @@ def save_coregistration_files(fns):
 def coregister_polhemus_mri(
     fns,
     use_headshape=True,
-    use_nose=False,
+    use_nose=True,
     allow_mri_scaling=False,
     mni_fiducials=None,
     n_init=1,
@@ -1231,7 +1231,7 @@ def plot_coregistration(
     display_sensor_oris=True,
     display_fiducials=True,
     display_headshape_pnts=True,
-    include_nose=False,
+    include_nose=True,
     filename=None,
     show=True,
 ):

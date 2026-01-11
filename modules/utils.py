@@ -61,7 +61,7 @@ class SurfaceFilenames:
         self.fsl_dir = os.environ["FSLDIR"]
 
         # Nifti files
-        self.smri_file = f"{root}/smri.nii.gz"
+        self.mri_file = f"{root}/smri.nii.gz"
         self.std_brain = f"{self.fsl_dir}/data/standard/MNI152_T1_1mm_brain.nii.gz"
 
         # Transformations
@@ -83,7 +83,7 @@ class CoregFilenames:
         os.makedirs(root, exist_ok=True)
 
         # Nifti files
-        self.smri_file = f"{root}/scaled_smri.nii.gz"
+        self.mri_file = f"{root}/scaled_mri.nii.gz"
 
         # Fif files
         self.info_fif_file = f"{root}/info-raw.fif"
@@ -92,17 +92,14 @@ class CoregFilenames:
         self.ctf_head_mri_t_file = f"{root}/ctf_head_mri-trans.fif"
         self.mrivoxel_scaledmri_t_file = f"{root}/mrivoxel_scaledmri_t_file-trans.fif"
 
-        # Fiducials / polhemus
-        self.mni_nasion_mni_file = f"{root}/mni_nasion.txt"
-        self.mni_rpa_mni_file = f"{root}/mni_rpa.txt"
-        self.mni_lpa_mni_file = f"{root}/mni_lpa.txt"
-        self.smri_nasion_file = f"{root}/smri_nasion.txt"
-        self.smri_rpa_file = f"{root}/smri_rpa.txt"
-        self.smri_lpa_file = f"{root}/smri_lpa.txt"
-        self.polhemus_nasion_file = f"{root}/polhemus_nasion.txt"
-        self.polhemus_rpa_file = f"{root}/polhemus_rpa.txt"
-        self.polhemus_lpa_file = f"{root}/polhemus_lpa.txt"
-        self.polhemus_headshape_file = f"{root}/polhemus_headshape.txt"
+        # Fiducials / headshape points
+        self.mri_nasion_file = f"{root}/mri_nasion.txt"
+        self.mri_rpa_file = f"{root}/mri_rpa.txt"
+        self.mri_lpa_file = f"{root}/mri_lpa.txt"
+        self.head_nasion_file = f"{root}/head_nasion.txt"
+        self.head_rpa_file = f"{root}/head_rpa.txt"
+        self.head_lpa_file = f"{root}/head_lpa.txt"
+        self.head_headshape_file = f"{root}/head_headshape.txt"
 
         # Freesurfer mesh in native space
         # - these are the ones shown in the surface plot
@@ -127,7 +124,7 @@ def system_call(cmd, verbose=True):
 
 
 def convert_notts_opm_files_to_fif(
-    mat_file, smri_file, tsv_file, out_fif_file, out_fixed_smri_file
+    mat_file, mri_file, tsv_file, out_fif_file, out_fixed_mri_file
 ):
     """Convert Nottingham OPM data from matlab file to fif file.
 
@@ -135,13 +132,13 @@ def convert_notts_opm_files_to_fif(
     ----------
     mat_file : str
         The matlab file containing the OPM data.
-    smri_file : str
+    mri_file : str
         The structural MRI file.
     tsv_file : str
         The tsv file containing the sensor locations and orientations.
     out_fif_file : str
         The output fif file.
-    out_fixed_smri_file : str
+    out_fixed_mri_file : str
         The output structural MRI file with corrected sform.
 
     Notes
@@ -155,8 +152,8 @@ def convert_notts_opm_files_to_fif(
     The x,y,z columns are the sensor locations in metres.
     The qx,qy,qz columns are the sensor orientations in metres.
     """
-    # correct sform for smri
-    sform_std_fixed = correct_notts_mri(smri_file, out_fixed_smri_file)
+    # correct sform for mri
+    sform_std_fixed = correct_notts_mri(mri_file, out_fixed_mri_file)
 
     # Note that later in this function, we will also apply this sform to
     # the sensor coordinates and orientations.
@@ -175,8 +172,8 @@ def convert_notts_opm_files_to_fif(
     sensor_bads = chan_info.iloc[:, 3].to_numpy().T
 
     # Need to undo orginal sform on sensor locs and oris and then apply new sform
-    smri = nib.load(smri_file)
-    overall_xform = sform_std_fixed @ np.linalg.pinv(smri.header.get_sform())
+    mri = nib.load(mri_file)
+    overall_xform = sform_std_fixed @ np.linalg.pinv(mri.header.get_sform())
 
     # This trans isn't really mri to head, it is mri to "mri_fixed",
     # but mri_fixed is not available as an option
@@ -333,14 +330,14 @@ def convert_notts_opm_files_to_fif(
     raw.save(out_fif_file, overwrite=True)
 
 
-def correct_notts_mri(smri_file, smri_fixed_file):
+def correct_notts_mri(mri_file, mri_fixed_file):
     """Correct the sform in the structural MRI file.
 
     Parameters
     ----------
-    smri_file : str
+    mri_file : str
         The structural MRI file.
-    smri_fixed_file : str
+    mri_fixed_file : str
         The output structural MRI file with corrected sform.
 
     Returns
@@ -352,10 +349,10 @@ def correct_notts_mri(smri_file, smri_fixed_file):
     -----
     The sform is corrected so that it is in standard orientation.
     """
-    shutil.copyfile(smri_file, smri_fixed_file)
+    shutil.copyfile(mri_file, mri_fixed_file)
 
-    smri = nib.load(smri_fixed_file)
-    sform = smri.header.get_sform()
+    mri = nib.load(mri_fixed_file)
+    sform = mri.header.get_sform()
     sform_std = np.copy(sform)
 
     # sform_std[0, 0:4] = [-1, 0, 0, 128]
@@ -368,7 +365,7 @@ def correct_notts_mri(smri_file, smri_fixed_file):
 
     system_call(
         "fslorient -setsform {} {}".format(
-            " ".join(map(str, sform_std.flatten())), smri_fixed_file
+            " ".join(map(str, sform_std.flatten())), mri_fixed_file
         )
     )
 

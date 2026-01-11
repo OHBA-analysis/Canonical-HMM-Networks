@@ -513,7 +513,7 @@ def extract_surfaces(mri_file, outdir, include_nose=True, do_mri2mniaxes_xform=T
             fns.mni_mri_t_file,
         )
 
-    print("Cleaning up flirt files")
+    print("Cleaning up FLIRT files")
     utils.system_call(f"rm -f {fns.root}/flirt*", verbose=False)
 
     # Plot the surfaces
@@ -835,7 +835,19 @@ def save_coregistration_files(fns):
         "bet_inskull_mesh_vtk_file",
         "bet_outskull_mesh_vtk_file",
     ]:
-        shutil.copyfile(getattr(sfns, filename), getattr(cfns, filename))
+        src = getattr(sfns, filename)
+        dst = getattr(cfns, filename)
+        if os.path.exists(src):
+            shutil.copyfile(src, dst)
+
+    # ------------------------------------------------------------------------
+    # Create sMRI-derived freesurfer meshes in native/mri space in mm, for use
+    # by forward modelling
+    # ------------------------------------------------------------------------
+
+    nativeindex_scalednative_t = np.copy(xform_nativeindex2scalednative)
+    mrivoxel_scaledmri_t = Transform("mri_voxel", "mri", nativeindex_scalednative_t)
+    _create_freesurfer_meshes_from_bet_surfaces(cfns, mrivoxel_scaledmri_t["trans"])
 
     # -----------------------
     # Plot the coregistration
@@ -846,6 +858,7 @@ def save_coregistration_files(fns):
         display_sensors=False,
         display_fiducials=False,
         display_headshape_pnts=False,
+        include_nose=False,
     )
 
     print("Coregistration complete.")
@@ -1058,13 +1071,15 @@ def coregister_polhemus_mri(
     xform_nativeindex2scalednative = (
         xform_native2scalednative @ xform_nativeindex2native
     )
-    for filename in [
+    filenames = [
         "mri_file",
         "bet_outskin_mesh_file",
-        "bet_outskin_plus_nose_mesh_file",
         "bet_inskull_mesh_file",
         "bet_outskull_mesh_file",
-    ]:
+    ]
+    if use_nose:
+        filenames.append("bet_outskin_plus_nose_mesh_file")
+    for filename in filenames:
         shutil.copyfile(getattr(sfns, filename), getattr(cfns, filename))
         # Command: fslorient -setsform <sform> <mri_file>
         sform = xform_nativeindex2scalednative.flatten()

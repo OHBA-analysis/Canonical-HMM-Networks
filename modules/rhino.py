@@ -4,14 +4,20 @@ import os
 import copy
 import shutil
 import warnings
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import nibabel as nib
 import nilearn as nil
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
-from pathlib import Path
-from scipy.spatial import KDTree, QhullError
+from sklearn.mixture import GaussianMixture
+from numba import cfunc, carray
+from numba.types import intc, intp, float64, voidptr, CPointer
+from scipy import ndimage, LowLevelCallable
+from scipy.spatial import KDTree
+
 from fsl import wrappers as fsl_wrappers
 
 import mne
@@ -31,7 +37,7 @@ from mne.viz.backends.renderer import _get_renderer
 from . import utils
 
 
-def extract_surfaces(mri_file, outdir, do_mri2mniaxes_xform=True):
+def extract_surfaces(mri_file, outdir, include_nose=False, do_mri2mniaxes_xform=True):
     """Extract surfaces.
 
     Extracts inner skull, outer skin (scalp) and brain surfaces from passed
@@ -52,8 +58,9 @@ def extract_surfaces(mri_file, outdir, do_mri2mniaxes_xform=True):
           - bet_inskull_mesh_file is actually the brain surface
           - bet_outskull_mesh_file is actually the inner skull surface
           - bet_outskin_mesh_file is the outer skin/scalp surface
-    5) Output the transform from MRI space to MNI
-    6) Output surfaces in MRI space
+    5) Add nose to scalp surface (optional)
+    6) Output the transform from MRI space to MNI
+    7) Output surfaces in MRI space
 
     Parameters
     ----------
@@ -65,6 +72,11 @@ def extract_surfaces(mri_file, outdir, do_mri2mniaxes_xform=True):
         axis used throughout RHINO. The qform will be ignored.
     outdir : str
         Output directory.
+    include_nose : bool, optional
+        Specifies whether to add the nose to the outer skin (scalp) surface.
+        This can help RHINO's coregistration to work better, assuming that there
+        are headshape points that also include the nose.
+        Requires the structural MRI to have a FOV that includes the nose!
     do_mri2mniaxes_xform : bool, optional
         Specifies whether to do step (1) above, i.e. transform MRI to be
         aligned with the MNI axes. Sometimes needed when the MRI goes out
@@ -78,6 +90,7 @@ def extract_surfaces(mri_file, outdir, do_mri2mniaxes_xform=True):
     # - MRI (native): sform (mri2mniaxes) --> MNI axes
 
     # RHINO does everthing in mm
+
 
     print()
     print("Extracting surfaces")
@@ -264,8 +277,203 @@ def extract_surfaces(mri_file, outdir, do_mri2mniaxes_xform=True):
     flirt_mri_mni_bet_file = f"{fns.root}/flirt"
     fsl_wrappers.bet(flirt_mri_mni_file, flirt_mri_mni_bet_file, A=True)
 
+    # ---------------------------------------
+    # 5) Add nose to scalp surface (optional)
+    # ---------------------------------------
+
+    if include_nose:
+        print("Refining scalp surface...")
+
+        # We do this in MNI big FOV space, to allow the full nose to be included
+
+        # Calculate flirt_mni2mnibigfov_xform
+        mni2mnibigfov_xform = _get_flirt_xform_between_axes(
+            from_nii=flirt_mri_mni_file, target_nii=fns.std_brain_bigfov
+        )
+        flirt_mni2mnibigfov_xform_file = f"{fns.root}/flirt_mni2mnibigfov_xform.txt"
+        np.savetxt(flirt_mni2mnibigfov_xform_file, mni2mnibigfov_xform)
+
+        # Calculate overall transform, from mri to MNI big fov
+        #
+        # Command: convert_xfm -omat <flirt_mri2mnibigfov_xform_file> \
+        #          -concat <flirt_mni2mnibigfov_xform_file> <flirt_mri2mni_xform_file>"
+        flirt_mri2mnibigfov_xform_file = f"{fns.root}/flirt_mri2mnibigfov_xform.txt"
+        fsl_wrappers.concatxfm(
+            flirt_mri2mni_xform_file,
+            flirt_mni2mnibigfov_xform_file,
+            flirt_mri2mnibigfov_xform_file
+        )  # Note, the wrapper reverses the order of arguments
+
+        # Move MRI to MNI big FOV space and load in
+        #
+        # Command: flirt -in <mri_file> -ref <std_brain_bigfov> -applyxfm \
+        #          -init <flirt_mri2mnibigfov_xform_file> \
+        #          -out <flirt_mri_mni_bigfov_file>
+        flirt_mri_mni_bigfov_file = f"{fns.root}/flirt_mri_mni_bigfov"
+        fsl_wrappers.flirt(
+            fns.mri_file,
+            fns.std_brain_bigfov,
+            applyxfm=True,
+            init=flirt_mri2mnibigfov_xform_file,
+            out=flirt_mri_mni_bigfov_file,
+        )
+
+        # Move scalp to MNI big FOV space and load in
+        #
+        # Command: flirt -in <flirt_outskin_file> -ref <std_brain_bigfov> \
+        #          -applyxfm -init <flirt_mni2mnibigfov_xform_file> \
+        #          -out <flirt_outskin_bigfov_file>
+        flirt_outskin_file = f"{fns.root}/flirt_outskin_mesh"
+        flirt_outskin_bigfov_file = f"{fns.root}/flirt_outskin_mesh_bigfov"
+        fsl_wrappers.flirt(
+            flirt_outskin_file,
+            fns.std_brain_bigfov,
+            applyxfm=True,
+            init=flirt_mni2mnibigfov_xform_file,
+            out=flirt_outskin_bigfov_file,
+        )
+        scalp = nib.load(f"{flirt_outskin_bigfov_file}.nii.gz")
+
+        # Create mask by filling outline
+
+        # Add a border of ones to the mask, in case the complete head is
+        # not in the FOV, without this binary_fill_holes will not work
+        mask = np.ones(np.add(scalp.shape, 2))
+
+        # Note that z=100 is where the standard MNI FOV starts in the big FOV
+        mask[1:-1, 1:-1, 102:-1] = scalp.get_fdata()[:, :, 101:]
+        mask[:, :, :101] = 0
+
+        # We assume that the top of the head is not cutoff by the FOV,
+        # we need to assume this so that binary_fill_holes works:
+        mask[:, :, -1] = 0
+        mask = ndimage.morphology.binary_fill_holes(mask)
+
+        # Remove added border
+        mask[:, :, :102] = 0
+        mask = mask[1:-1, 1:-1, 1:-1]
+
+        print("Adding nose to scalp surface...")
+
+        # Reclassify bright voxels outside of mask (to put nose inside
+        # the mask since bet will have excluded it)
+        vol = nib.load(f"{flirt_mri_mni_bigfov_file}.nii.gz")
+        vol_data = vol.get_fdata()
+
+        # Normalise vol data
+        vol_data = vol_data / np.max(vol_data.flatten())
+
+        # Estimate observation model params of 2 class GMM with diagonal
+        # cov matrix where the two classes correspond to inside and outside
+        # the bet mask
+        means = np.zeros([2, 1])
+        means[0] = np.mean(vol_data[np.where(mask == 0)])
+        means[1] = np.mean(vol_data[np.where(mask == 1)])
+        precisions = np.zeros([2, 1])
+        precisions[0] = 1 / np.var(vol_data[np.where(mask == 0)])
+        precisions[1] = 1 / np.var(vol_data[np.where(mask == 1)])
+        weights = np.zeros([2])
+        weights[0] = np.sum((mask == 0))
+        weights[1] = np.sum((mask == 1))
+
+        # Create GMM with those observation models
+        gm = GaussianMixture(n_components=2, random_state=0, covariance_type="diag")
+        gm.means_ = means
+        gm.precisions_ = precisions
+        gm.precisions_cholesky_ = np.sqrt(precisions)
+        gm.weights_ = weights
+
+        # Classify voxels outside BET mask with GMM
+        labels = gm.predict(vol_data[np.where(mask == 0)].reshape(-1, 1))
+
+        # Insert new labels for voxels outside BET mask into mask
+        mask[np.where(mask == 0)] = labels
+
+        # Ignore anything that is well below the nose and above top of head
+        mask[:, :, 0:50] = 0
+        mask[:, :, 300:] = 0
+
+        # Clean up mask
+        mask[:, :, 50:300] = ndimage.morphology.binary_fill_holes(mask[:, :, 50:300])
+        mask[:, :, 50:300] = _binary_majority3d(mask[:, :, 50:300])
+        mask[:, :, 50:300] = ndimage.morphology.binary_fill_holes(mask[:, :, 50:300])
+
+        for i in range(mask.shape[0]):
+            mask[i, :, 50:300] = ndimage.morphology.binary_fill_holes(mask[i, :, 50:300])
+        for i in range(mask.shape[1]):
+            mask[:, i, 50:300] = ndimage.morphology.binary_fill_holes(mask[:, i, 50:300])
+        for i in range(50, 300, 1):
+            mask[:, :, i] = ndimage.morphology.binary_fill_holes(mask[:, :, i])
+
+        # Extract outline
+        outline = np.zeros(mask.shape)
+        mask = mask.astype(np.uint8)
+
+        # Use morph gradient to find the outline of the solid mask
+        structure = np.ones((3, 3), dtype=bool)
+
+        for i in range(outline.shape[0]):
+            slice_bool = mask[i, :, :].astype(bool)
+            grad = ndimage.binary_dilation(
+                slice_bool, structure=structure
+            ) ^ ndimage.binary_erosion(slice_bool, structure=structure)
+            outline[i, :, :] += grad.astype(np.uint8)
+
+        for i in range(outline.shape[1]):
+            slice_bool = mask[:, i, :].astype(bool)
+            grad = ndimage.binary_dilation(
+                slice_bool, structure=structure
+            ) ^ ndimage.binary_erosion(slice_bool, structure=structure)
+            outline[:, i, :] += grad.astype(np.uint8)
+
+        for i in range(50, 300, 1):
+            slice_bool = mask[:, :, i].astype(bool)
+            grad = ndimage.binary_dilation(
+                slice_bool, structure=structure
+            ) ^ ndimage.binary_erosion(slice_bool, structure=structure)
+            outline[:, :, i] += grad.astype(np.uint8)
+
+        outline /= 3
+
+        outline[np.where(outline > 0.6)] = 1
+        outline[np.where(outline <= 0.6)] = 0
+        outline = outline.astype(np.uint8)
+
+        # Save as NIFTI
+        outline_nii = nib.Nifti1Image(outline, scalp.affine)
+        nib.save(outline_nii, f"{flirt_outskin_bigfov_file}_plus_nose.nii.gz")
+
+        # Command: fslcpgeom <src> <dest>
+        fsl_wrappers.fslcpgeom(
+            f"{flirt_outskin_bigfov_file}.nii.gz",
+            f"{flirt_outskin_bigfov_file}_plus_nose.nii.gz",
+        )
+
+        # Transform outskin plus nose nii mesh from MNI big FOV to MRI space
+
+        # First we need to invert the flirt_mri2mnibigfov_xform_file xform:
+        #
+        # Command: convert_xfm -omat <flirt_mnibigfov2mri_xform_file> \
+        #          -inverse <flirt_mri2mnibigfov_xform_file>
+        flirt_mnibigfov2mri_xform_file = f"{fns.root}/flirt_mnibigfov2mri_xform.txt"
+        fsl_wrappers.invxfm(
+            flirt_mri2mnibigfov_xform_file,
+            flirt_mnibigfov2mri_xform_file,
+        )  # Note, the wrapper reverses the order of arguments
+
+        # Command: flirt -in <dest> -ref <smri_file> -applyxfm \
+        #          -init <flirt_mnibigfov2mri_xform_file> \
+        #          -out <bet_outskin_plus_nose_mesh_file>
+        fsl_wrappers.flirt(
+            f"{flirt_outskin_bigfov_file}_plus_nose.nii.gz",
+            fns.mri_file,
+            applyxfm=True,
+            init=flirt_mnibigfov2mri_xform_file,
+            out=fns.bet_outskin_plus_nose_mesh_file,
+        )
+
     # ----------------------------------------------
-    # 5) Output the transform from MRI space to MNI
+    # 6) Output the transform from MRI space to MNI
     # ----------------------------------------------
 
     flirt_mni2mri = np.loadtxt(mni2mri_flirt_xform_file)
@@ -276,7 +484,7 @@ def extract_surfaces(mri_file, outdir, do_mri2mniaxes_xform=True):
     write_trans(fns.mni_mri_t_file, mni_mri_t, overwrite=True)
 
     # ----------------------------------------
-    # 6) Output surfaces in MRI(native) space
+    # 7) Output surfaces in MRI(native) space
     # ----------------------------------------
 
     # Transform betsurf output mask/mesh output from MNI to MRI space
@@ -308,12 +516,12 @@ def extract_surfaces(mri_file, outdir, do_mri2mniaxes_xform=True):
     utils.system_call(f"rm -f {fns.root}/flirt*", verbose=False)
 
     # Plot the surfaces
-    plot_surfaces(outdir, id)
+    plot_surfaces(outdir, id, include_nose=include_nose)
 
     print("Surface extraction complete.")
 
 
-def plot_surfaces(outdir, id):
+def plot_surfaces(outdir, id, include_nose=False):
     """Plot a structural MRI and extracted surfaces.
 
     Parameters
@@ -322,11 +530,15 @@ def plot_surfaces(outdir, id):
         Output directory.
     id : str
         Identifier for the subject/session subdirectory in the output directory.
+    include_nose : bool, optional
+        Should we also plot the outskin surface including the nose?
     """
     fns = utils.SurfaceFilenames(outdir)
 
     # Surfaces to plot
     surfaces = ["inskull", "outskull", "outskin"]
+    if include_nose:
+        surfaces.append("outskin_plus_nose")
     output_files = [f"{fns.root}/{surface}.png" for surface in surfaces]
 
     # Check surfaces exist
@@ -1732,7 +1944,7 @@ def _make_fwd_solution(
 
     # Get bem solution
     if isinstance(bem, str):
-        bem = read_bem_solution(bem)
+        bem = mne.read_bem_solution(bem)
     else:
         if not isinstance(bem, mne.bem.ConductorModel):
             raise TypeError("bem must be a string or ConductorModel")
@@ -2052,3 +2264,21 @@ def _get_vol_info_from_nii(mri):
         mri_depth=dims[2],
         mri_volume_name=mri,
     )
+
+
+@cfunc(intc(CPointer(float64), intp, CPointer(float64), voidptr))
+def _majority(values_ptr, len_values, result, data):
+    values = carray(values_ptr, (len_values,), dtype=float64)
+    required_majority = 14  # in 3D we have 27 voxels in total
+    result[0] = values.sum() >= required_majority
+    return 1
+
+
+def _binary_majority3d(img):
+    if img.dtype != "bool":
+        raise ValueError("binary_majority3d(img) requires img to be binary")
+    if len(img.shape) != 3:
+        raise ValueError("binary_majority3d(img) requires img to be 3D")
+    return ndimage.generic_filter(
+        img, LowLevelCallable(_majority.ctypes), size=3
+    ).astype(int)

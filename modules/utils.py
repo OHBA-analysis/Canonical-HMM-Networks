@@ -63,6 +63,7 @@ class SurfaceFilenames:
         # Nifti files
         self.mri_file = f"{root}/smri.nii.gz"
         self.std_brain = f"{self.fsl_dir}/data/standard/MNI152_T1_1mm_brain.nii.gz"
+        self.std_brain_bigfov = f"{self.fsl_dir}/data/standard/MNI152_T1_1mm_BigFoV_facemask.nii.gz"
 
         # Transformations
         self.mni2mri_flirt_xform_file = f"{root}/mni2mri_flirt_xform.txt"
@@ -73,6 +74,7 @@ class SurfaceFilenames:
         self.bet_inskull_mesh_vtk_file = f"{root}/inskull_mesh.vtk"
         self.bet_outskull_mesh_vtk_file = f"{root}/outskull_mesh.vtk"
         self.bet_outskin_mesh_file = f"{root}/outskin_mesh.nii.gz"
+        self.bet_outskin_plus_nose_mesh_file = f"{root}/outskin_plus_nose_mesh.nii.gz"
         self.bet_inskull_mesh_file = f"{root}/inskull_mesh.nii.gz"
         self.bet_outskull_mesh_file = f"{root}/outskull_mesh.nii.gz"
 
@@ -105,6 +107,7 @@ class CoregFilenames:
         # - these are the ones shown in the surface plot
         # - these are also used by MNE forward modelling
         self.bet_outskin_surf_file = f"{root}/scaled_outskin.surf"
+        self.bet_outskin_plus_nose_surf_file = f"{root}/scaled_outskin_plus_nose.surf"
         self.bet_inskull_surf_file = f"{root}/scaled_inskull.surf"
         self.bet_outskull_surf_file = f"{root}/scaled_outskull.surf"
 
@@ -113,6 +116,7 @@ class CoregFilenames:
         self.bet_inskull_mesh_vtk_file = f"{root}/scaled_inskull_mesh.vtk"
         self.bet_outskull_mesh_vtk_file = f"{root}/scaled_outskull_mesh.vtk"
         self.bet_outskin_mesh_file = f"{root}/scaled_outskin_mesh.nii.gz"
+        self.bet_outskin_plus_nose_mesh_file = f"{root}/scaled_outskin_plus_nose_mesh.nii.gz"
         self.bet_inskull_mesh_file = f"{root}/scaled_inskull_mesh.nii.gz"
         self.bet_outskull_mesh_file = f"{root}/scaled_outskull_mesh.nii.gz"
 

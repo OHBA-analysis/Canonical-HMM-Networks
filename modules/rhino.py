@@ -11,7 +11,7 @@ import nilearn as nil
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from pathlib import Path
-from scipy.spatial import KDTree
+from scipy.spatial import KDTree, QhullError
 from fsl import wrappers as fsl_wrappers
 
 import mne
@@ -1028,7 +1028,6 @@ def plot_coregistration(
         Should we show the plots? Only used if filename has
         extension '.png'.
     """
-    print("Plotting coregistration")
 
     # Note the jargon used varies for xforms and coord spaces:
     # MEG (device): dev_head_t --> HEAD (polhemus)
@@ -1036,6 +1035,8 @@ def plot_coregistration(
     # MRI (native): mri_mrivoxel_t (native2nativeindex) --> MRI (native) voxel indices
 
     # RHINO does everthing in mm
+
+    print("Plotting coregistration")
 
     if filename is None:
         filename = f"{fns.coreg_dir}/coreg.png"
@@ -1064,7 +1065,6 @@ def plot_coregistration(
     # ------------
     # Setup xforms
     # ------------
-
     info = mne.io.read_info(info_fif_file)
 
     mrivoxel_scaledmri_t = read_trans(mrivoxel_scaledmri_t_file)
@@ -1072,9 +1072,9 @@ def plot_coregistration(
     dev_head_t, _ = _get_trans(info["dev_head_t"], "meg", "head")
 
     # Change xform from metres to mm.
-    # Note that MNE xform in fif.info assume metres, whereas we want it
-    # in mm. To change units for an xform, just need to change the translation
-    # part and leave the rotation alone
+    # Note that MNE xform in fif.info assume metres, whereas we want it in mm.
+    # To change units for an xform, just need to change the translation part
+    # and leave the rotation alone.
     dev_head_t["trans"][0:3, -1] = dev_head_t["trans"][0:3, -1] * 1000
 
     # We are going to display everything in MEG (device) coord frame in mm
@@ -1087,7 +1087,6 @@ def plot_coregistration(
     # ------------------------------------
     # Setup fiducials and headshape points
     # ------------------------------------
-
     if display_fiducials:
         # Load polhemus-derived fiducials, these are in mm in HEAD space
         polhemus_nasion_meg = None
@@ -1118,6 +1117,9 @@ def plot_coregistration(
         if os.path.isfile(mri_lpa_file):
             mri_lpa_head = np.loadtxt(mri_lpa_file)
             mri_lpa_meg = _xform_points(head_trans["trans"], mri_lpa_head)
+    else:
+        polhemus_nasion_meg = polhemus_rpa_meg = polhemus_lpa_meg = None
+        mri_nasion_meg = mri_rpa_meg = mri_lpa_meg = None
 
     if display_headshape_pnts:
         polhemus_headshape_meg = None
@@ -1126,80 +1128,110 @@ def plot_coregistration(
             polhemus_headshape_meg = _xform_points(
                 head_trans["trans"], polhemus_headshape_head
             )
+    else:
+        polhemus_headshape_meg = None
 
     # -----------------
     # Setup MEG sensors
     # -----------------
-
-    if display_sensors or display_sensor_oris:
-        meg_picks = mne.pick_types(info, meg=True, ref_meg=False, exclude=())
-        coil_transs = [
-            mne._fiff.tag._loc_to_coil_trans(info["chs"][pick]["loc"])
-            for pick in meg_picks
-        ]
-        coils = mne.forward._create_meg_coils(
-            [info["chs"][pick] for pick in meg_picks], acc="normal"
-        )
-
-        meg_rrs, meg_tris, meg_sensor_locs, meg_sensor_oris = [], [], [], []
-        offset = 0
-        for coil, coil_trans in zip(coils, coil_transs):
-            rrs, tris = mne.viz._3d._sensor_shape(coil)
-            rrs = apply_trans(coil_trans, rrs)
-            meg_rrs.append(rrs)
-            meg_tris.append(tris + offset)
-
-            sens_locs = np.array([[0, 0, 0]])
-            sens_locs = apply_trans(coil_trans, sens_locs)
-
-            # MNE assumes that affine transform to determine sensor
-            # location/orientation is applied to a unit vector along
-            # the z-axis
-            sens_oris = np.array([[0, 0, 1]]) * 0.01
-            sens_oris = apply_trans(coil_trans, sens_oris)
-            sens_oris = sens_oris - sens_locs
-            meg_sensor_locs.append(sens_locs)
-            meg_sensor_oris.append(sens_oris)
-
-            offset += len(meg_rrs[-1])
-
-        if len(meg_rrs) == 0:
-            print("MEG sensors not found. Cannot plot MEG locations.")
-        else:
-            meg_rrs = apply_trans(meg_trans, np.concatenate(meg_rrs, axis=0))
-            meg_sensor_locs = apply_trans(
-                meg_trans, np.concatenate(meg_sensor_locs, axis=0)
+    meg_rrs, meg_tris, meg_sensor_locs, meg_sensor_oris = [], [], [], []
+    try:
+        if display_sensors or display_sensor_oris:
+            meg_picks = mne.pick_types(info, meg=True, ref_meg=False, exclude=())
+            coil_transs = [
+                mne._fiff.tag._loc_to_coil_trans(info["chs"][pick]["loc"])
+                for pick in meg_picks
+            ]
+            coils = mne.forward._create_meg_coils(
+                [info["chs"][pick] for pick in meg_picks], acc="normal"
             )
-            meg_sensor_oris = apply_trans(
-                meg_trans, np.concatenate(meg_sensor_oris, axis=0)
-            )
-            meg_tris = np.concatenate(meg_tris, axis=0)
 
-        # convert to mm
-        meg_rrs = meg_rrs * 1000
-        meg_sensor_locs = meg_sensor_locs * 1000
-        meg_sensor_oris = meg_sensor_oris * 1000
+            degenerate_sensor_indices = []
+            offset = 0
+            sensor_idx = 0
+
+            for coil, coil_trans in zip(coils, coil_transs):
+                try:
+                    rrs, tris = mne.viz._3d._sensor_shape(coil)
+                except Exception as exc:
+                    is_qhull = (
+                        isinstance(exc, RuntimeError)
+                        or "Qhull" in repr(exc)
+                        or "Initial simplex is flat" in str(exc)
+                    )
+                    if is_qhull:
+                        # Create a tiny 3-point triangle in metres (so later transforms work)
+                        tiny = 0.001  # 1 mm
+                        rrs = np.array(
+                            [[0.0, 0.0, 0.0], [tiny, 0.0, 0.0], [-tiny, 0.0, 0.0]]
+                        )
+                        tris = np.array([[0, 1, 2]])
+                        degenerate_sensor_indices.append(sensor_idx)
+                    else:
+                        # Unexpected exception - re-raise
+                        raise
+
+                # apply coil transform to get coil shape in device coords (metres)
+                rrs = apply_trans(coil_trans, rrs)
+                meg_rrs.append(rrs)
+                meg_tris.append(tris + offset)
+
+                # sensor location: origin transformed by coil_trans
+                sens_locs = np.array([[0.0, 0.0, 0.0]])
+                sens_locs = apply_trans(coil_trans, sens_locs)
+
+                # orientation: unit z vector (small scale)
+                sens_oris = np.array([[0.0, 0.0, 1.0]]) * 0.01
+                sens_oris = apply_trans(coil_trans, sens_oris)
+                sens_oris = sens_oris - sens_locs
+
+                meg_sensor_locs.append(sens_locs)
+                meg_sensor_oris.append(sens_oris)
+
+                offset += len(rrs)
+                sensor_idx += 1
+
+            if len(meg_rrs) == 0:
+                print("MEG sensors not found. Cannot plot MEG locations.")
+            else:
+                meg_rrs = apply_trans(meg_trans, np.concatenate(meg_rrs, axis=0))
+                meg_sensor_locs = apply_trans(
+                    meg_trans, np.concatenate(meg_sensor_locs, axis=0)
+                )
+                meg_sensor_oris = apply_trans(
+                    meg_trans, np.concatenate(meg_sensor_oris, axis=0)
+                )
+                meg_tris = np.concatenate(meg_tris, axis=0)
+
+            # convert to mm
+            meg_rrs = meg_rrs * 1000
+            meg_sensor_locs = meg_sensor_locs * 1000
+            meg_sensor_oris = meg_sensor_oris * 1000
+
+    except Exception as e:
+        # If anything goes catastrophically wrong in sensor setup, report and continue
+        print(f"Warning: problem setting up MEG sensors: {e}")
+        meg_rrs = np.array([]).reshape((0, 3))
+        meg_tris = np.array([]).reshape((0, 3))
+        meg_sensor_locs = np.array([]).reshape((0, 3))
+        meg_sensor_oris = np.array([]).reshape((0, 3))
 
     # --------
     # Do plots
     # --------
-
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
 
         # Initialize figure
         renderer = _get_renderer(None, bgcolor=(0.5, 0.5, 0.5), size=(500, 500))
+
+        # Headshape points
         if display_headshape_pnts:
-            # Polhemus-derived headshape points
-            if (
-                polhemus_headshape_meg is not None and len(polhemus_headshape_meg.T)
-            ) > 0:
+            if polhemus_headshape_meg is not None and len(polhemus_headshape_meg.T) > 0:
                 polhemus_headshape_megt = polhemus_headshape_meg.T
                 if len(polhemus_headshape_megt) < 200:
                     scale = 0.007
-                elif (
-                    len(polhemus_headshape_megt) >= 200 and len(polhemus_headshape_megt)
-                ) < 400:
+                elif len(polhemus_headshape_megt) >= 200 and len(polhemus_headshape_megt) < 400:
                     scale = 0.005
                 elif len(polhemus_headshape_megt) >= 400:
                     scale = 0.003
@@ -1214,15 +1246,14 @@ def plot_coregistration(
             else:
                 print("There are no headshape points to display")
 
+        # Fiducials
         if display_fiducials:
-
             # MRI-derived nasion, rpa, lpa
             if mri_nasion_meg is not None and len(mri_nasion_meg.T) > 0:
                 color, scale, alpha = "yellow", 0.09, 1
                 for data in [mri_nasion_meg.T, mri_rpa_meg.T, mri_lpa_meg.T]:
                     transform = np.eye(4)
                     transform[:3, :3] = mri_trans["trans"][:3, :3] * scale * 1000
-                    # rotate around Z axis 45 deg first
                     transform = transform @ rotation(0, 0, np.pi / 4)
                     renderer.quiver3d(
                         x=data[:, 0],
@@ -1259,6 +1290,7 @@ def plot_coregistration(
             else:
                 print("There are no polhemus derived fiducials to display")
 
+        # Sensors
         if display_sensors:
             if len(meg_rrs) > 0:
                 color, alpha = (0.0, 0.25, 0.5), 0.2
@@ -1269,9 +1301,12 @@ def plot_coregistration(
                     opacity=alpha,
                     backface_culling=True,
                 )
+            else:
+                print("No sensor surfaces available to display")
 
+        # Sensor orientations (arrows)
         if display_sensor_oris:
-            if len(meg_rrs) > 0:
+            if len(meg_sensor_locs) > 0:
                 color, scale = (0.0, 0.25, 0.5), 15
                 renderer.quiver3d(
                     x=meg_sensor_locs[:, 0],
@@ -1286,9 +1321,8 @@ def plot_coregistration(
                     backface_culling=False,
                 )
 
+        # Outskin surface
         if display_outskin:
-            # MRI-derived scalp surface
-            # if surf file does not exist, then we must create it
             _create_freesurfer_mesh_from_bet_surface(
                 infile=outskin_mesh_4surf_file,
                 surf_outfile=outskin_surf_file,
@@ -1297,9 +1331,7 @@ def plot_coregistration(
             )
             coords_native, faces = nib.freesurfer.read_geometry(outskin_surf_file)
 
-            # Move to MEG (device) space
             coords_meg = _xform_points(mri_trans["trans"], coords_native.T).T
-
             surf_mri = dict(rr=coords_meg, tris=faces)
 
             renderer.surface(
@@ -1310,12 +1342,16 @@ def plot_coregistration(
             )
 
         renderer.set_camera(
-            azimuth=90, elevation=90, distance=600, focalpoint=(0.0, 0.0, 0.0)
+            azimuth=90,
+            elevation=90,
+            distance=600,
+            focalpoint=(0.0, 0.0, 0.0),
         )
 
         # Save
         ext = Path(filename).suffix.lower()
 
+        outnames = []
         if ext == ".html":
             print(f"Saving {filename}")
             renderer.figure.plotter.export_html(filename)
@@ -1355,7 +1391,6 @@ def plot_coregistration(
 
             plotter = renderer.figure.plotter
 
-            outnames = []
             for name, cam in views:
                 renderer.set_camera(
                     azimuth=cam["azimuth"],
@@ -1371,7 +1406,7 @@ def plot_coregistration(
         else:
             raise ValueError("Extention must be png or html.")
 
-        if show:
+        if show and len(outnames) > 0:
             titles = ["Frontal", "Right", "Top"]
             fig, axes = plt.subplots(1, 3, figsize=(12, 8))
             for ax, fname, title in zip(axes, outnames, titles):

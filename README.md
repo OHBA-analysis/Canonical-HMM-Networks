@@ -49,6 +49,8 @@ There is also a sensor-level canonical HMM available for Elekta MEG. New parcell
 
 - See `eeg.ipynb` for a start-to-end example script for applying the canonical HMM to parcellated EEG data. Note, to source reconstruct/parcellate EEG data we need medium/high-density EEG, e.g. ~64+ channels.
 
+Also see the `/contributions` directory for further example scripts and tutorials.
+
 ## Getting help
 
 Please open an [issue](https://github.com/OHBA-analysis/Canonical-HMM-Networks/issues) on this repository if you run into errors, need help or spot any typos. Alternatively, you can email chetan.gohil@psych.ox.ac.uk.

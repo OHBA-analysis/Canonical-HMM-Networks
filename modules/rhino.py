@@ -864,7 +864,7 @@ def save_coregistration_files(fns):
     print("Coregistration complete.")
 
 
-def coregister_polhemus_mri(
+def coregister_head_and_mri(
     fns,
     use_headshape=True,
     use_nose=True,

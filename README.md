@@ -55,7 +55,7 @@ Also see the `/contributions` directory for further example scripts and tutorial
 
 If you find this resource useful, please cite the repository:
 
-> **Gohil, C., & Woolrich, M. W. (2025). Canonical HMM Networks (Version 0.2.0) [Computer software]. https://doi.org/10.5281/zenodo.17583973.**
+> **Gohil, C., & Woolrich, M. W. (2025). Canonical HMM Networks (Version 0.3.0) [Computer software]. https://doi.org/10.5281/zenodo.17583973.**
 
 And following papers:
 

@@ -18,9 +18,9 @@ pip install fslpy ipyevents
 
 We recommend running the Jupyter Notebook scripts using [VSCode](https://code.visualstudio.com/). Use the `osld` kernel (conda environment) when running the scripts.
 
-## Example Scripts
+## Tutorials
 
-The data preparation (including preprocessing, source reconstruction and parcellation) needs to be (roughly) matched to the training data for the canonical HMM. The examples scripts illustrate how to perform these steps on new data. [MNE-Python](https://mne.tools/stable/index.html) is used to do the data processing. The most important thing to match is the sampling frequency (250 Hz) and parcellation.
+The data preparation (including preprocessing, source reconstruction and parcellation) needs to be (roughly) matched to the training data for the canonical HMM. The tutorials illustrate how to perform these steps on new data. [MNE-Python](https://mne.tools/stable/index.html) is used to do the data processing. The most important thing to match is the sampling frequency (250 Hz) and parcellation.
 
 Canonical HMMs are available for the following parcellations:
 
@@ -33,21 +33,35 @@ There is also a sensor-level canonical HMM available for Elekta MEG. New parcell
 
 ### Elekta MEG
 
-- See `elekta_meg_parcel.ipynb` for a start-to-end example script for applying the canonical HMM to parcellated Elekta MEG data.
+- See `elekta_meg_parcel.ipynb` for a start-to-end tutorial on applying the canonical HMM to parcellated Elekta MEG data.
 
-- See `elekta_meg_sensor.ipynb` for an example of how to apply the canonical HMM to sensor-level data.
+- See `elekta_meg_sensor.ipynb` for a tutorial on applying the canonical HMM to sensor-level data.
 
 ### CTF MEG
 
-- See `ctf_meg.ipynb` for a start-to-end example script for applying the canonical HMM to parcellated CTF MEG data.
+- See `ctf_meg.ipynb` for a start-to-end tutorial on applying the canonical HMM to parcellated CTF MEG data.
 
 ### OPM
 
-- See `opm.ipynb` for a start-to-end-example script for applying the canonical HMM to parcellated OPM data.
+- See `opm.ipynb` for a start-to-end tutorial on applying the canonical HMM to parcellated OPM data.
 
 ### EEG
 
-- See `eeg.ipynb` for a start-to-end example script for applying the canonical HMM to parcellated EEG data. Note, to source reconstruct/parcellate EEG data we need medium/high-density EEG, e.g. ~64+ channels.
+- See `eeg.ipynb` for a start-to-end tutorial on applying the canonical HMM to parcellated EEG data. Note, to source reconstruct/parcellate EEG data we need medium/high-density EEG, e.g. ~64+ channels.
+
+Also see the `/contributions` directory for further example scripts and tutorials.
+
+## Citation
+
+If you find this resource useful, please cite the repository:
+
+> **Gohil, C., & Woolrich, M. W. (2025). Canonical HMM Networks (Version 0.2.0) [Computer software]. https://doi.org/10.5281/zenodo.17583973.**
+
+And following papers:
+
+> **Gohil, C., Huang, R., Higgins, C., van Es, M. W., Quinn, A. J., Vidaurre, D., & Woolrich, M. W. (2025). Canonical Hidden Markov Model Networks for Studying M/EEG. bioRxiv, 2025-10.**
+
+> **Gohil, C., Huang, R., Roberts, E., van Es, M. W., Quinn, A. J., Vidaurre, D., & Woolrich, M. W. (2024). osl-dynamics, a toolbox for modeling fast dynamic brain activity. Elife, 12, RP91949.**
 
 ## Getting help
 

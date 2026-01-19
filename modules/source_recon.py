@@ -955,6 +955,25 @@ def _prepare_beamformer_input(
 
 
 def _niimask2mmpointcloud(nii_mask, volindex=None):
+    """Takes in a nii.gz mask (which equals zero for background and neq zero
+    for the mask) and returns the mask as a 3 x npoints point cloud in native
+    space in mm's.
+
+    Parameters
+    ----------
+    nii_mask : string
+        A nii.gz mask file name or the [x,y,z] volume (with zero for background,
+        and !=0 for the mask).
+    volindex : int
+        Volume index, used if nii_mask is a 4D file.
+
+    Returns
+    -------
+    pc : numpy.ndarray
+        3 x npoints point cloud as mm in native space (using sform).
+    values : numpy.ndarray
+        npoints values.
+    """
     vol = nib.load(nii_mask).get_fdata()
     if len(vol.shape) == 4 and volindex is not None:
         vol = vol[:, :, :, volindex]
@@ -970,6 +989,15 @@ def _niimask2mmpointcloud(nii_mask, volindex=None):
 
 
 def _closest_node(node, nodes):
+    """Find nearest node in nodes to the passed in node.
+
+    Returns
+    -------
+    index : int
+        Index to the nearest node in nodes.
+    distance : float
+        Distance.
+    """
     if len(nodes) == 1:
         nodes = np.reshape(nodes, [-1, 1])
     kdtree = KDTree(nodes)
@@ -978,10 +1006,20 @@ def _closest_node(node, nodes):
 
 
 def _get_gridstep(coords):
+    """Get gridstep (i.e. spatial resolution of dipole grid) in mm.
+
+    Parameters
+    ----------
+    coords : numpy.ndarray
+        Coordinates.
+
+    Returns
+    -------
+    gridstep: int
+        Spatial resolution of dipole grid in mm.
+    """
     store = []
     for ii in range(coords.shape[0]):
         store.append(np.sqrt(np.sum(np.square(coords[ii, :] - coords[0, :]))))
     store = np.asarray(store)
     return int(np.round(np.min(store[np.where(store > 0)]) * 1000))
-
-

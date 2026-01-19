@@ -40,10 +40,8 @@ def detect_bad_segments(
 
     Returns
     -------
-    bad : np.ndarray
-        Times of True (bad) or False (good) to indicate whether
-        a time point is good or bad. This is the full length of
-        the original time series. Shape is (n_samples,).
+    raw : mne.io.Raw
+        MNE Raw object.
     """
     print()
     print("Bad segment detection")
@@ -168,8 +166,8 @@ def detect_bad_channels(
 
     Returns
     -------
-    bad_ch_names : list of str
-        Detected bad channel names.
+    raw : mne.io.Raw
+        MNE Raw object.
     """
     print()
     print("Bad channel detection")
@@ -291,3 +289,256 @@ def _gesd(X, alpha, p_out=1, outlier_side=0):
     mask = np.zeros(n).astype(bool)
     mask[rm_idx[np.where(R > lam)[0]]] = True
     return mask
+
+
+def decimate_headshape_points(
+    raw,
+    decimate_amount=0.01,             # Decimate head mesh (1 cm bins)
+    include_facial_info=True,         # Keep facial points for ICP
+    remove_zlim=-0.02,                # Remove >2 cm below nasion
+    angle=0,                          # No rotation
+    method="gridaverage",             # Grid-based averaging
+    face_Z=[-0.06, 0.02],             # Keep face: -6 to +2 cm (up-down)
+    face_Y=[0.06, 0.15],              # 6–15 cm forward
+    face_X=[-0.03, 0.03],             # ±3 cm left-right
+    decimate_facial_info=True,
+    decimate_facial_info_amount=0.01  # Decimate face (1 cm bins)
+):
+    """Decimate headshape points.
+
+    Useful for reducing the number of headshape points collected using an
+    EinScan for OPM recordings.
+
+    Parameters
+    ----------
+    raw : mne.io.Raw
+        MNE Raw object.
+    decimate_amount : float, optional
+        Bin width in metres to decimate.
+    include_facial_info : bool, optional
+        Should we keep facial headshape points?
+    remove_zlim : float, optional
+        Remove headshape points below this z-value (in metres).
+    angle : float, optional
+        How much should we rotate the headshape points?
+    method : str, optional
+        What method should we use for decimation?
+    face_Z : list, optional
+        Keep headshape points within these z-values (in metres).
+    face_Y : list, optional
+        Keep headshape points within these y-values (in metres).
+    face_X : list, optional
+        Keep headshape points within these x-values (in metres).
+    decimate_facial_info : bool, optional
+        Should we decimate facial headshape points?
+    decimate_facial_info_amount : float, optional
+        Bin width in metres to decimate.
+
+    Returns
+    -------
+    raw : mne.io.Raw
+        MNE Raw object.
+    """
+    print()
+    print("Decimate headshape points")
+    print("-------------------------")
+
+    dig = raw.info['dig']
+    headshape = np.array([d['r'] for d in dig if 'r' in d])
+    print("Digitization points:", headshape.shape)
+
+    decimated_headshape = _decimate_headshape(
+            headshape,
+            decimate_amount=decimate_amount,
+            include_facial_info=include_facial_info,
+            remove_zlim=remove_zlim,
+            angle=angle,
+            method=method,
+            face_Z=face_Z,
+            face_Y=face_Y,
+            face_X=face_X,
+            decimate_facial_info=decimate_facial_info,
+            decimate_facial_info_amount=decimate_facial_info_amount,
+        )
+
+    # Initialize fiducial positions
+    fid_positions = {'nasion': None, 'lpa': None, 'rpa': None}
+
+    # Extract fiducials from the dig points
+    for f in dig:
+        if f['coord_frame'] == 4:  # Ensure head coordinate frame
+            if f['ident'] == 2 and fid_positions['nasion'] is None:
+                fid_positions['nasion'] = f['r']
+            elif f['ident'] == 1 and fid_positions['lpa'] is None:
+                fid_positions['lpa'] = f['r']
+            elif f['ident'] == 3 and fid_positions['rpa'] is None:
+                fid_positions['rpa'] = f['r']
+
+    # Verify the extracted fiducials
+    if any(v is None for v in fid_positions.values()):
+        raise RuntimeError(
+            "One or more fiducials (nasion, LPA, RPA) not found in "
+            "the head coordinate frame."
+        )
+
+    # Create a DigMontage using the extracted fiducials
+    # and decimated headshape points
+    montage = mne.channels.make_dig_montage(
+        hsp=decimated_headshape,
+        nasion=fid_positions['nasion'],
+        lpa=fid_positions['lpa'],
+        rpa=fid_positions['rpa'],
+        coord_frame='head'
+    )
+
+    # Set the new montage
+    return raw.set_montage(montage)
+
+
+def _decimate_headshape(
+    headshape,
+    decimate_amount=0.015,      # average over 1.5cm
+    include_facial_info=True,
+    remove_zlim=0.02,           # Remove 2cm above nasion
+    angle=10,                   # At an angle of 10deg
+    method="gridaverage",
+    face_Z = [-0.08, 0.02],     # Z-axis (up-down) -8cm to 2cm
+    face_Y = [0.06, 0.15],      # Y-axis (forward-back) 6 to 15cm
+    face_X = [-0.07, 0.07],     # X-axis (left_right) -7 to 7cm
+    decimate_facial_info=True,
+    decimate_facial_info_amount=0.008 # average over 0.8cm
+):
+    """Decimate headshape points.
+
+    Parameters
+    ----------
+    - headshape : np.ndarray
+        Nx3 array of headshape points in meters.
+    - include_facial_info : bool
+        Include facial points if True.
+    - remove_zlim : float
+        Remove points above nasion on the z-axis in meters.
+    - method : str
+        Downsampling method. Note: only method supported is 'gridaverage'.
+    - facial_info_above_z (float): float
+        Max z-value for facial points in meters.
+    - facial_info_below_z : float
+        Min z-value for facial points in meters.
+    - facial_info_above_y : float
+        Max y-value for facial points in meters.
+    - facial_info_below_y : float
+        Min y-value for facial points in meters.
+    - facial_info_below_x : float
+        Min x-value for facial points in meters.
+    - decimate_facial_info : bool
+        Whether to decimate facial points.
+    - decimate_facial_info_amount : float
+        Grid size for downsampling facial info in meters.
+
+    Returns
+    -------
+    decimated_headshape : np.ndarray
+        Decimated headshape points.
+    """
+    if include_facial_info:
+        facial_mask = (
+            (headshape[:, 2] > face_Z[0]) &
+            (headshape[:, 2] < face_Z[1]) &
+            (headshape[:, 1] > face_Y[0]) &
+            (headshape[:, 1] < face_Y[1]) &
+            (headshape[:, 0] > face_X[0]) &
+            (headshape[:, 0] < face_X[1])
+        )
+        facial_points = headshape[facial_mask]
+        if decimate_facial_info:
+            facial_points = _grid_average_decimate(
+                facial_points, decimate_facial_info_amount
+            )
+    if remove_zlim is not None:
+        print('Removing points below zlim')
+        rotated_headshape = _rotate_pointcloud(headshape, angle, 'x')
+        z_mask = rotated_headshape[:, 2] > remove_zlim
+        filtered_rotated_points = rotated_headshape[z_mask]
+        headshape = _rotate_pointcloud(filtered_rotated_points, -angle, 'x')
+    if method == 'gridaverage':
+        print(f"Using {method}")
+        headshape = _grid_average_decimate(headshape, decimate_amount)
+    else:
+        raise ValueError(f"Unsupported decimation method: {method}")
+    if include_facial_info:
+        headshape = np.vstack((headshape, facial_points))
+    return headshape
+
+
+def _rotate_pointcloud(points, angle_degrees, axis='x'):
+    """
+    Rotates the point cloud around a specified axis.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        Headshape points
+    angle_degrees : float
+        Amount to rotate in degrees.
+    axis : str
+        Axis to rotate.
+    """
+    angle_radians = np.radians(angle_degrees)
+    if axis == 'x':
+        rotation_matrix = np.array([
+            [1, 0, 0],
+            [0, np.cos(angle_radians), -np.sin(angle_radians)],
+            [0, np.sin(angle_radians), np.cos(angle_radians)]
+        ])
+    elif axis == 'y':
+        rotation_matrix = np.array([
+            [np.cos(angle_radians), 0, np.sin(angle_radians)],
+            [0, 1, 0],
+            [-np.sin(angle_radians), 0, np.cos(angle_radians)]
+        ])
+    elif axis == 'z':
+        rotation_matrix = np.array([
+            [np.cos(angle_radians), -np.sin(angle_radians), 0],
+            [np.sin(angle_radians), np.cos(angle_radians), 0],
+            [0, 0, 1]
+        ])
+    else:
+        raise ValueError("Invalid axis. Choose from 'x', 'y', or 'z'.")
+    return np.dot(points, rotation_matrix.T)
+
+
+def _grid_average_decimate(point_cloud, voxel_size):
+    """Decimate a point cloud using grid averaging.
+
+    This function divides the space into a voxel grid, computes the average
+    position of points within each voxel, and returns a decimated point cloud.
+
+    Parameters
+    ----------
+    point_cloud : np.ndarray
+        A numpy array of shape (N, 3) representing the point cloud, where N
+        is the number of points, and each point has (x, y, z) coordinates.
+
+    voxel_size : float
+        The size of the voxel grid. Points within a grid cell are averaged
+        to compute the decimated point.
+
+    Returns
+    -------
+    decimated_cloud : np.ndarray
+        A numpy array of shape (M, 3) representing the decimated point cloud,
+        where M is the number of voxels containing points.
+
+    Notes
+    -----
+    - This method assumes the input point cloud is dense and unstructured.
+    - For very large point clouds, consider optimizing memory usage.
+    """
+    voxel_indices = np.floor(point_cloud / voxel_size).astype(np.int32)
+    voxel_dict = {}
+    for idx, point in zip(voxel_indices, point_cloud):
+        key = tuple(idx)
+        if key not in voxel_dict:
+            voxel_dict[key] = []
+        voxel_dict[key].append(point)
+    return np.array([np.mean(voxel_dict[key], axis=0) for key in voxel_dict])

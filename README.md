@@ -4,7 +4,7 @@ This repository contains canonical Hidden Markov Models (HMMs) that were pre-tra
 
 ## Preprint
 
-https://www.biorxiv.org/content/10.1101/2025.10.21.683692v1
+https://www.biorxiv.org/content/10.1101/2025.10.21.683692v2
 
 ## Installation
 

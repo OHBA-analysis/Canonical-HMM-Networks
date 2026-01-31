@@ -9,7 +9,7 @@ authors:
 repository-code: https://github.com/OHBA-analysis/Canonical-HMM-Networks
 doi: 10.5281/zenodo.17583973
 url: https://zenodo.org/records/17583973
-version: 0.3.0
+version: 0.3.1
 date-released: 2025-01-02
 license: MIT
 type: software

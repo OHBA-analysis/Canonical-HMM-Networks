@@ -138,7 +138,103 @@ def detect_bad_segments(
     return raw
 
 
-def detect_bad_channels(
+def detect_bad_channels(*args, mode="std", **kwargs):
+    """Detect bad channels.
+
+    See _detect_bad_channels_std and _detect_bad_channels_psd for
+    arguments that can be passed to this function.
+
+    Parameters
+    ----------
+    mode : str, optional
+        Either 'std' or 'psd'.
+
+    Returns
+    -------
+    raw : mne.io.Raw
+        MNE Raw object with bad channels marked.
+    """
+    if mode == "std":
+        return _detect_bad_channels_std(*args, **kwargs)
+    elif mode == "psd":
+        return _detect_bad_channels_psd(*args, **kwargs)
+    else:
+        raise ValueError(f"mode must be 'std' or 'psd', got '{mode}'.")
+
+
+def _detect_bad_channels_std(raw, picks, ref_meg="auto", significance_level=0.05):
+    """Detect bad channels using the G-ESD algorithm based on standard deviation.
+
+    Parameters
+    ----------
+    raw : mne.io.Raw
+        MNE raw object.
+    picks : str
+        Channel types to pick. See Notes for recommendations.
+    ref_meg : str
+        ref_meg argument to pass with mne.pick_types.
+    significance_level : float
+        Significance level for detecting outliers. Must be between 0-1.
+
+    Returns
+    -------
+    raw : mne.io.Raw
+        MNE Raw object with bad channels marked.
+
+    Notes
+    -----
+    For Elekta/MEGIN data, we recommend using picks='mag' or picks='grad'
+    separately (in no particular order).
+
+    Note that with CTF data, mne.pick_types will return:
+        ~274 axial grads (as magnetometers) if picks='mag', ref_meg=False
+        ~28 reference axial grads if picks='grad'.
+    Thus, it is recommended to use picks='mag' in combination with ref_mag=False,
+    and picks='grad' separately (in no particular order).
+    """
+    print()
+    print("Bad channel detection (std)")
+    print("---------------------------")
+
+    # Select channels
+    if (picks == "mag") or (picks == "grad"):
+        ch_inds = mne.pick_types(raw.info, meg=picks, ref_meg=ref_meg, exclude="bads")
+    elif picks == "meg":
+        ch_inds = mne.pick_types(raw.info, meg=True, ref_meg=ref_meg, exclude="bads")
+    elif picks == "eeg":
+        ch_inds = mne.pick_types(raw.info, eeg=True, ref_meg=ref_meg, exclude="bads")
+    elif picks == "eog":
+        ch_inds = mne.pick_types(raw.info, eog=True, ref_meg=ref_meg, exclude="bads")
+    elif picks == "ecg":
+        ch_inds = mne.pick_types(raw.info, ecg=True, ref_meg=ref_meg, exclude="bads")
+    elif picks == "misc":
+        ch_inds = mne.pick_types(raw.info, misc=True, exclude="bads")
+    else:
+        raise NotImplementedError(f"picks={picks} not available.")
+    ch_names = np.array(raw.ch_names)[ch_inds]
+
+    # Calculate standard deviation for each channel
+    data = raw.get_data(picks=ch_inds)
+    std = np.std(data, axis=-1)
+
+    # Detect outliers
+    mask = _gesd(std, alpha=significance_level)
+    chs = np.array(raw.ch_names)[ch_inds]
+    bads = list(chs[mask])
+
+    # Mark as bad
+    for bad in bads:
+        if bad not in raw.info["bads"]:
+            raw.info["bads"] += bads
+
+    # Print useful summary information
+    print(f"{len(bads)} bad channels:")
+    print(bads)
+
+    return raw
+
+
+def _detect_bad_channels_psd(
     raw,
     picks,
     fmin=2,
@@ -167,11 +263,11 @@ def detect_bad_channels(
     Returns
     -------
     raw : mne.io.Raw
-        MNE Raw object.
+        MNE Raw object with bad channels marked.
     """
     print()
-    print("Bad channel detection")
-    print("---------------------")
+    print("Bad channel detection (psd)")
+    print("---------------------------")
 
     # Pick channels
     if picks == "eeg":
@@ -215,11 +311,14 @@ def detect_bad_channels(
 
     # Get the names for the bad channels
     chs = np.array(raw.ch_names)[chs]
-    bads = list(chs[mask])
+    bads = chs[mask]
 
     # Mark bad channels in the Raw object
-    raw.info["bads"] = bads
+    for bad in bads:
+        if bad not in raw.info["bads"]:
+            raw.info["bads"] += bads
 
+    # Print useful summary information
     print(f"{len(bads)} bad channels:")
     print(bads)
 
@@ -293,16 +392,16 @@ def _gesd(X, alpha, p_out=1, outlier_side=0):
 
 def decimate_headshape_points(
     raw,
-    decimate_amount=0.01,             # Decimate head mesh (1 cm bins)
-    include_facial_info=True,         # Keep facial points for ICP
-    remove_zlim=-0.02,                # Remove >2 cm below nasion
-    angle=0,                          # No rotation
-    method="gridaverage",             # Grid-based averaging
-    face_Z=[-0.06, 0.02],             # Keep face: -6 to +2 cm (up-down)
-    face_Y=[0.06, 0.15],              # 6–15 cm forward
-    face_X=[-0.03, 0.03],             # ±3 cm left-right
+    decimate_amount=0.01,  # Decimate head mesh (1 cm bins)
+    include_facial_info=True,  # Keep facial points for ICP
+    remove_zlim=-0.02,  # Remove >2 cm below nasion
+    angle=0,  # No rotation
+    method="gridaverage",  # Grid-based averaging
+    face_Z=[-0.06, 0.02],  # Keep face: -6 to +2 cm (up-down)
+    face_Y=[0.06, 0.15],  # 6–15 cm forward
+    face_X=[-0.03, 0.03],  # ±3 cm left-right
     decimate_facial_info=True,
-    decimate_facial_info_amount=0.01  # Decimate face (1 cm bins)
+    decimate_facial_info_amount=0.01,  # Decimate face (1 cm bins)
 ):
     """Decimate headshape points.
 
@@ -343,36 +442,36 @@ def decimate_headshape_points(
     print("Decimate headshape points")
     print("-------------------------")
 
-    dig = raw.info['dig']
-    headshape = np.array([d['r'] for d in dig if 'r' in d])
+    dig = raw.info["dig"]
+    headshape = np.array([d["r"] for d in dig if "r" in d])
     print("Digitization points:", headshape.shape)
 
     decimated_headshape = _decimate_headshape(
-            headshape,
-            decimate_amount=decimate_amount,
-            include_facial_info=include_facial_info,
-            remove_zlim=remove_zlim,
-            angle=angle,
-            method=method,
-            face_Z=face_Z,
-            face_Y=face_Y,
-            face_X=face_X,
-            decimate_facial_info=decimate_facial_info,
-            decimate_facial_info_amount=decimate_facial_info_amount,
-        )
+        headshape,
+        decimate_amount=decimate_amount,
+        include_facial_info=include_facial_info,
+        remove_zlim=remove_zlim,
+        angle=angle,
+        method=method,
+        face_Z=face_Z,
+        face_Y=face_Y,
+        face_X=face_X,
+        decimate_facial_info=decimate_facial_info,
+        decimate_facial_info_amount=decimate_facial_info_amount,
+    )
 
     # Initialize fiducial positions
-    fid_positions = {'nasion': None, 'lpa': None, 'rpa': None}
+    fid_positions = {"nasion": None, "lpa": None, "rpa": None}
 
     # Extract fiducials from the dig points
     for f in dig:
-        if f['coord_frame'] == 4:  # Ensure head coordinate frame
-            if f['ident'] == 2 and fid_positions['nasion'] is None:
-                fid_positions['nasion'] = f['r']
-            elif f['ident'] == 1 and fid_positions['lpa'] is None:
-                fid_positions['lpa'] = f['r']
-            elif f['ident'] == 3 and fid_positions['rpa'] is None:
-                fid_positions['rpa'] = f['r']
+        if f["coord_frame"] == 4:  # Ensure head coordinate frame
+            if f["ident"] == 2 and fid_positions["nasion"] is None:
+                fid_positions["nasion"] = f["r"]
+            elif f["ident"] == 1 and fid_positions["lpa"] is None:
+                fid_positions["lpa"] = f["r"]
+            elif f["ident"] == 3 and fid_positions["rpa"] is None:
+                fid_positions["rpa"] = f["r"]
 
     # Verify the extracted fiducials
     if any(v is None for v in fid_positions.values()):
@@ -385,10 +484,10 @@ def decimate_headshape_points(
     # and decimated headshape points
     montage = mne.channels.make_dig_montage(
         hsp=decimated_headshape,
-        nasion=fid_positions['nasion'],
-        lpa=fid_positions['lpa'],
-        rpa=fid_positions['rpa'],
-        coord_frame='head'
+        nasion=fid_positions["nasion"],
+        lpa=fid_positions["lpa"],
+        rpa=fid_positions["rpa"],
+        coord_frame="head",
     )
 
     # Set the new montage
@@ -397,16 +496,16 @@ def decimate_headshape_points(
 
 def _decimate_headshape(
     headshape,
-    decimate_amount=0.015,      # average over 1.5cm
+    decimate_amount=0.015,  # average over 1.5cm
     include_facial_info=True,
-    remove_zlim=0.02,           # Remove 2cm above nasion
-    angle=10,                   # At an angle of 10deg
+    remove_zlim=0.02,  # Remove 2cm above nasion
+    angle=10,  # At an angle of 10deg
     method="gridaverage",
-    face_Z = [-0.08, 0.02],     # Z-axis (up-down) -8cm to 2cm
-    face_Y = [0.06, 0.15],      # Y-axis (forward-back) 6 to 15cm
-    face_X = [-0.07, 0.07],     # X-axis (left_right) -7 to 7cm
+    face_Z=[-0.08, 0.02],  # Z-axis (up-down) -8cm to 2cm
+    face_Y=[0.06, 0.15],  # Y-axis (forward-back) 6 to 15cm
+    face_X=[-0.07, 0.07],  # X-axis (left_right) -7 to 7cm
     decimate_facial_info=True,
-    decimate_facial_info_amount=0.008 # average over 0.8cm
+    decimate_facial_info_amount=0.008,  # average over 0.8cm
 ):
     """Decimate headshape points.
 
@@ -442,12 +541,12 @@ def _decimate_headshape(
     """
     if include_facial_info:
         facial_mask = (
-            (headshape[:, 2] > face_Z[0]) &
-            (headshape[:, 2] < face_Z[1]) &
-            (headshape[:, 1] > face_Y[0]) &
-            (headshape[:, 1] < face_Y[1]) &
-            (headshape[:, 0] > face_X[0]) &
-            (headshape[:, 0] < face_X[1])
+            (headshape[:, 2] > face_Z[0])
+            & (headshape[:, 2] < face_Z[1])
+            & (headshape[:, 1] > face_Y[0])
+            & (headshape[:, 1] < face_Y[1])
+            & (headshape[:, 0] > face_X[0])
+            & (headshape[:, 0] < face_X[1])
         )
         facial_points = headshape[facial_mask]
         if decimate_facial_info:
@@ -455,12 +554,12 @@ def _decimate_headshape(
                 facial_points, decimate_facial_info_amount
             )
     if remove_zlim is not None:
-        print('Removing points below zlim')
-        rotated_headshape = _rotate_pointcloud(headshape, angle, 'x')
+        print("Removing points below zlim")
+        rotated_headshape = _rotate_pointcloud(headshape, angle, "x")
         z_mask = rotated_headshape[:, 2] > remove_zlim
         filtered_rotated_points = rotated_headshape[z_mask]
-        headshape = _rotate_pointcloud(filtered_rotated_points, -angle, 'x')
-    if method == 'gridaverage':
+        headshape = _rotate_pointcloud(filtered_rotated_points, -angle, "x")
+    if method == "gridaverage":
         print(f"Using {method}")
         headshape = _grid_average_decimate(headshape, decimate_amount)
     else:
@@ -470,7 +569,7 @@ def _decimate_headshape(
     return headshape
 
 
-def _rotate_pointcloud(points, angle_degrees, axis='x'):
+def _rotate_pointcloud(points, angle_degrees, axis="x"):
     """
     Rotates the point cloud around a specified axis.
 
@@ -484,24 +583,30 @@ def _rotate_pointcloud(points, angle_degrees, axis='x'):
         Axis to rotate.
     """
     angle_radians = np.radians(angle_degrees)
-    if axis == 'x':
-        rotation_matrix = np.array([
-            [1, 0, 0],
-            [0, np.cos(angle_radians), -np.sin(angle_radians)],
-            [0, np.sin(angle_radians), np.cos(angle_radians)]
-        ])
-    elif axis == 'y':
-        rotation_matrix = np.array([
-            [np.cos(angle_radians), 0, np.sin(angle_radians)],
-            [0, 1, 0],
-            [-np.sin(angle_radians), 0, np.cos(angle_radians)]
-        ])
-    elif axis == 'z':
-        rotation_matrix = np.array([
-            [np.cos(angle_radians), -np.sin(angle_radians), 0],
-            [np.sin(angle_radians), np.cos(angle_radians), 0],
-            [0, 0, 1]
-        ])
+    if axis == "x":
+        rotation_matrix = np.array(
+            [
+                [1, 0, 0],
+                [0, np.cos(angle_radians), -np.sin(angle_radians)],
+                [0, np.sin(angle_radians), np.cos(angle_radians)],
+            ]
+        )
+    elif axis == "y":
+        rotation_matrix = np.array(
+            [
+                [np.cos(angle_radians), 0, np.sin(angle_radians)],
+                [0, 1, 0],
+                [-np.sin(angle_radians), 0, np.cos(angle_radians)],
+            ]
+        )
+    elif axis == "z":
+        rotation_matrix = np.array(
+            [
+                [np.cos(angle_radians), -np.sin(angle_radians), 0],
+                [np.sin(angle_radians), np.cos(angle_radians), 0],
+                [0, 0, 1],
+            ]
+        )
     else:
         raise ValueError("Invalid axis. Choose from 'x', 'y', or 'z'.")
     return np.dot(points, rotation_matrix.T)

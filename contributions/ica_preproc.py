@@ -1,4 +1,4 @@
-"""Extra Preprocessing functions."""
+"""ICA preprocessing functions."""
 
 from mne.preprocessing import ICA
 from mne_icalabel import label_components
@@ -54,9 +54,7 @@ def ica_ICLabel(raw, picks="eeg", n_components=30, method="iclabel", threshold=0
         raw_fit.set_eeg_reference("average", verbose=False)
 
     # 2. Fit ICA (Extended Infomax)
-    print(
-        f"Fitting ICA (method='infomax', n_components={n_components}, picks={picks})..."
-    )
+    print(f"Fitting ICA (method='infomax', n_components={n_components}, picks={picks})...")
     ica = ICA(
         n_components=n_components,
         method="infomax",
@@ -87,13 +85,9 @@ def ica_ICLabel(raw, picks="eeg", n_components=30, method="iclabel", threshold=0
             # Only mark for removal if confidence is above the set threshold
             if prob > threshold:
                 exclude_idx.append(idx)
-                print(
-                    f"  ICA{idx:03d}: {label} (confidence: {prob:.2f}) -> [Marked for removal]"
-                )
+                print(f"  ICA{idx:03d}: {label} (confidence: {prob:.2f}) -> [Marked for removal]")
             else:
-                print(
-                    f"  ICA{idx:03d}: {label} (confidence: {prob:.2f}) -> [Kept] (Confidence below threshold)"
-                )
+                print(f"  ICA{idx:03d}: {label} (confidence: {prob:.2f}) -> [Kept] (Confidence below threshold)")
         else:
             # If brain or other, can also print for reference
             # print(f"  ICA{idx:03d}: {label} (confidence: {prob:.2f}) -> [Kept]")

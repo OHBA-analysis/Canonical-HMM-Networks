@@ -2,7 +2,9 @@
 
 import mne
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy import stats
+from scipy.ndimage.filters import uniform_filter1d
 
 
 def detect_bad_segments(
@@ -211,7 +213,6 @@ def _detect_bad_channels_std(raw, picks, ref_meg="auto", significance_level=0.05
         ch_inds = mne.pick_types(raw.info, misc=True, exclude="bads")
     else:
         raise NotImplementedError(f"picks={picks} not available.")
-    ch_names = np.array(raw.ch_names)[ch_inds]
 
     # Calculate standard deviation for each channel
     data = raw.get_data(picks=ch_inds)
@@ -225,11 +226,11 @@ def _detect_bad_channels_std(raw, picks, ref_meg="auto", significance_level=0.05
     # Mark as bad
     for bad in bads:
         if bad not in raw.info["bads"]:
-            raw.info["bads"] += bads
+            raw.info["bads"].append(bad)
 
     # Print useful summary information
     print(f"{len(bads)} bad channels:")
-    print(bads)
+    print(np.array(bads))
 
     return raw
 
@@ -316,78 +317,129 @@ def _detect_bad_channels_psd(
     # Mark bad channels in the Raw object
     for bad in bads:
         if bad not in raw.info["bads"]:
-            raw.info["bads"] += bads
+            raw.info["bads"].append(bad)
 
     # Print useful summary information
     print(f"{len(bads)} bad channels:")
-    print(bads)
+    print(np.array(bads))
 
     return raw
 
 
-def _gesd(X, alpha, p_out=1, outlier_side=0):
-    """Detect outliers using Generalized ESD test.
+def _gesd(X, alpha, p_out=0.1, outlier_side=0):
+    """Generalised-ESD (Rosner) test for outliers.
 
     Parameters
     ----------
-    X : list or np.ndarray
-        data to detect outliers within. Must be a 1D array containing
-        the metric we want to detect outliers for. E.g. a list of
-        standard deviation for each window into a time series.
+    X : array-like, 1D
+        Data to test. NaNs are ignored (treated as non-tested).
     alpha : float
-        Significance level threshold for outliers.
+        Significance level (0 < alpha < 1).
     p_out : float
-        Maximum fraction of time series to set as outliers.
-    outlier_side : int, optional
-        Can be{-1,0,1} :
-        - -1 -> outliers are all smaller
-        -  0 -> outliers could be small/negative or large/positive
-        -  1 -> outliers are all larger
+        Maximum fraction of points that may be flagged as outliers (0..1).
+    outlier_side : int
+        -1 -> look for small outliers
+         0 -> two-sided (both small and large) -- default
+         1 -> look for large outliers
 
     Returns
     -------
-    mask : np.ndarray
-        Boolean mask for bad segments. Same shape as X.
+    mask : np.ndarray (bool)
+        Boolean array of same length as X. True indicates an outlier.
 
     Notes
     -----
     B. Rosner (1983). Percentage Points for a Generalized ESD
     Many-Outlier Procedure. Technometrics 25(2), pp. 165-172.
     """
-    if outlier_side == 0:
-        alpha = alpha / 2
-    n_out = int(np.ceil(len(X) * p_out))
-    if np.any(np.isnan(X)):
-        y = np.where(np.isnan(X))[0]
-        idx1, x2 = _gesd(X[np.isfinite(X)], alpha, n_out, outlier_side)
-        idx = np.zeros_like(X).astype(bool)
-        idx[y[idx1]] = True
-    n = len(X)
-    temp = X.copy()
-    R = np.zeros(n_out)
-    rm_idx = np.zeros(n_out, dtype=int)
-    lam = np.zeros(n_out)
-    for j in range(0, int(n_out)):
-        i = j + 1
+    X = np.asarray(X, dtype=float)
+    if X.ndim != 1:
+        raise ValueError("_gesd expects a 1D array-like input.")
+    if not (0 <= p_out <= 1):
+        raise ValueError("p_out must be between 0 and 1.")
+    if not (0 < alpha < 1):
+        raise ValueError("alpha must be in (0,1).")
+    if outlier_side not in (-1, 0, 1):
+        raise ValueError("outlier_side must be -1, 0, or 1.")
+
+    finite_mask = np.isfinite(X)
+    Xf = X[finite_mask]
+    n = Xf.size
+    if n == 0:
+        return np.zeros_like(X, dtype=bool)
+
+    # maximum number of outliers to consider
+    n_out = int(np.floor(n * float(p_out)))
+    if n_out <= 0:
+        return np.zeros_like(X, dtype=bool)
+
+    # Arrays to hold statistics for each removal step
+    R = np.zeros(n_out, dtype=float)
+    lam = np.zeros(n_out, dtype=float)
+    rm_order = (
+        []
+    )  # stores the original indices of removed points (relative to finite subset)
+
+    # Work on a working copy and an index map to original finite indices
+    arr = Xf.copy()
+    idx_map = np.arange(n)
+
+    for i in range(n_out):
+        # compute the current mean (ignoring NaNs)
+        mean_val = np.nanmean(arr)
+        # choose removal index based on outlier_side
         if outlier_side == -1:
-            rm_idx[j] = np.nanargmin(temp)
-            sample = np.nanmin(temp)
-            R[j] = np.nanmean(temp) - sample
-        elif outlier_side == 0:
-            rm_idx[j] = int(np.nanargmax(abs(temp - np.nanmean(temp))))
-            R[j] = np.nanmax(abs(temp - np.nanmean(temp)))
+            rm = int(np.nanargmin(arr))
+            dev = mean_val - arr[rm]
         elif outlier_side == 1:
-            rm_idx[j] = np.nanargmax(temp)
-            sample = np.nanmax(temp)
-            R[j] = sample - np.nanmean(temp)
-        R[j] = R[j] / np.nanstd(temp)
-        temp[int(rm_idx[j])] = np.nan
-        p = 1 - alpha / (n - i + 1)
-        t = stats.t.ppf(p, n - i - 1)
-        lam[j] = ((n - i) * t) / (np.sqrt((n - i - 1 + t**2) * (n - i + 1)))
-    mask = np.zeros(n).astype(bool)
-    mask[rm_idx[np.where(R > lam)[0]]] = True
-    return mask
+            rm = int(np.nanargmax(arr))
+            dev = arr[rm] - mean_val
+        else:  # two-sided
+            diffs = np.abs(arr - mean_val)
+            rm = int(np.nanargmax(diffs))
+            dev = diffs[rm]
+        # store the original index of the removed element
+        rm_order.append(int(idx_map[rm]))
+
+        sigma = np.nanstd(arr, ddof=0)
+        if sigma == 0 or np.isnan(sigma):
+            R[i] = 0.0
+        else:
+            R[i] = dev / sigma
+
+        # remove the element from arr and idx_map for next iteration
+        arr = np.delete(arr, rm)
+        idx_map = np.delete(idx_map, rm)
+
+        # compute lambda (critical value) for this iteration
+        m = n - i  # remaining sample size before removal
+        # if there are too few degrees of freedom, set critical to +inf so no detection
+        if m - 2 <= 0:
+            lam[i] = np.inf
+        else:
+            if outlier_side == 0:
+                # two-sided: adjust alpha/2 per Rosner's guidance
+                p = 1 - alpha / (2 * m)
+            else:
+                p = 1 - alpha / m
+            t = stats.t.ppf(p, m - 2)
+            lam[i] = ((m - 1) * t) / (np.sqrt((m - 2 + t**2) * m))
+
+    # Determine largest k (0-based) where R[k] > lam[k]
+    k_candidates = np.where(R > lam)[0]
+    if k_candidates.size == 0:
+        out_mask_finite = np.zeros(n, dtype=bool)
+    else:
+        k = int(k_candidates.max())
+        # the first k+1 entries of rm_order are flagged as outliers
+        out_idx = np.array(rm_order[: k + 1], dtype=int)
+        out_mask_finite = np.zeros(n, dtype=bool)
+        out_mask_finite[out_idx] = True
+
+    # Map back to original full-length mask (NaNs are False)
+    out_mask = np.zeros_like(X, dtype=bool)
+    out_mask[np.where(finite_mask)[0]] = out_mask_finite
+    return out_mask
 
 
 def decimate_headshape_points(
@@ -647,3 +699,103 @@ def _grid_average_decimate(point_cloud, voxel_size):
             voxel_dict[key] = []
         voxel_dict[key].append(point)
     return np.array([np.mean(voxel_dict[key], axis=0) for key in voxel_dict])
+
+
+def plot_sum_square_time_series(raw, exclude_bads=False):
+    """Plot sum-square time series.
+
+    Parameters
+    ----------
+    raw : mne.io.Raw
+        MNE Raw object.
+    exclude_bads : bool, optional
+        Whether to exclude bad channels and bad segments.
+    """
+    if exclude_bads:
+        # excludes bad channels and bad segments
+        exclude = "bads"
+    else:
+        # includes bad channels and bad segments
+        exclude = []
+
+    is_ctf = raw.info["dev_ctf_t"] is not None
+
+    if is_ctf:
+        # Note that with CTF mne.pick_types will return:
+        # ~274 axial grads (as magnetometers) if {picks: 'mag', ref_meg: False}
+        # ~28 reference axial grads if {picks: 'grad'}
+
+        channel_types = {
+            "Axial Grads (chtype=mag)": mne.pick_types(
+                raw.info, meg="mag", ref_meg=False, exclude=exclude
+            ),
+            "Ref Axial Grad (chtype=ref_meg)": mne.pick_types(
+                raw.info, meg="grad", exclude=exclude
+            ),
+            "EEG": mne.pick_types(raw.info, eeg=True),
+            "CSD": mne.pick_types(raw.info, csd=True),
+        }
+    else:
+        channel_types = {
+            "Magnetometers": mne.pick_types(raw.info, meg="mag", exclude=exclude),
+            "Gradiometers": mne.pick_types(raw.info, meg="grad", exclude=exclude),
+            "EEG": mne.pick_types(raw.info, eeg=True),
+            "CSD": mne.pick_types(raw.info, csd=True),
+        }
+
+    t = raw.times
+    x = raw.get_data()
+
+    # Number of subplots, i.e. the number of different channel types in the fif file
+    nrows = 0
+    for _, c in channel_types.items():
+        if len(c) > 0:
+            nrows += 1
+
+    if nrows == 0:
+        return None
+
+    # Make sum-square plots
+    fig, ax = plt.subplots(nrows=nrows, ncols=1, figsize=(16, 4))
+    if nrows == 1:
+        ax = [ax]
+    row = 0
+    for name, chan_inds in channel_types.items():
+        if len(chan_inds) == 0:
+            continue
+        ss = np.sum(x[chan_inds] ** 2, axis=0)
+
+        # calculate ss value to give to bad segments for plotting purposes
+        good_data = raw.get_data(picks=chan_inds, reject_by_annotation="NaN")
+        # get indices of good data
+        good_inds = np.where(~np.isnan(good_data[0, :]))[0]
+        ss_bad_value = np.mean(ss[good_inds])
+
+        if exclude_bads:
+            # set bad segs to mean
+            for aa in raw.annotations:
+                if "bad_segment" in aa["description"]:
+                    time_inds = np.where(
+                        (raw.times >= aa["onset"] - raw.first_time)
+                        & (raw.times <= (aa["onset"] + aa["duration"] - raw.first_time))
+                    )[0]
+                    ss[time_inds] = ss_bad_value
+
+        ss = uniform_filter1d(ss, int(raw.info["sfreq"]))
+
+        ax[row].plot(t, ss)
+        ax[row].legend([name], frameon=False, fontsize=16)
+        ax[row].set_xlim(t[0], t[-1])
+        for a in raw.annotations:
+            if "bad_segment" in a["description"]:
+                ax[row].axvspan(
+                    a["onset"] - raw.first_time,
+                    a["onset"] + a["duration"] - raw.first_time,
+                    color="red",
+                    alpha=0.8,
+                )
+        row += 1
+    ax[0].set_title("Sum-Square Across Channels")
+    ax[-1].set_xlabel("Time (seconds)")
+
+    plt.show()

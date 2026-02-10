@@ -133,11 +133,9 @@ def plot_canonical_group_level_networks(n_states, parcellation, plots_dir="plots
     os.makedirs(plots_dir, exist_ok=True)
 
     if parcellation == "38ROI_Giles":
-        parcellation_file = (
-            "fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii.gz"
-        )
+        parcellation_file = "atlas-Giles_nparc-38_space-MNI_res-8x8x8.nii.gz"
     elif parcellation == "52ROI_Glasser":
-        parcellation_file = "Glasser52_binary_space-MNI152NLin6_res-8x8x8.nii.gz"
+        parcellation_file = "atlas-Glasser_nparc-52_space-MNI_res-8x8x8.nii.gz"
     elif parcellation == "Elekta":
         parcellation == None
     else:

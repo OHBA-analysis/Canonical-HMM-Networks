@@ -24,10 +24,12 @@ The data preparation (including preprocessing, source reconstruction and parcell
 
 Canonical HMMs are available for the following parcellations:
 
-| Name           | parcellation\_file                                                     |
-|----------------|------------------------------------------------------------------------|
-| 38ROI\_Giles   | fmri\_d100\_parcellation\_with\_PCC\_reduced\_2mm\_ss5mm\_ds8mm.nii.gz |
-| 52ROI\_Glasser | Glasser52\_binary\_space-MNI152NLin6\_res-8x8x8.nii.gz                 |
+| Name           | parcellation\_file                                   |
+|----------------|------------------------------------------------------|
+| 38ROI\_Giles   | atlas-Giles\_nparc-38\_space-MNI\_res-8x8x8.nii.gz   |
+| 52ROI\_Glasser | atlas-Glasser\_nparc-52\_space-MNI\_res-8x8x8.nii.gz |
+
+For more information regarding the parcellations, see [here](https://osl-dynamics.readthedocs.io/en/latest/parcellations/index.html).
 
 There is also a sensor-level canonical HMM available for Elekta MEG. New parcellations could be made available on request, however, the rank of the [Cam-CAN](https://cam-can.mrc-cbu.cam.ac.uk/dataset/) data limits us to ~50 parcels.
 

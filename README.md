@@ -22,17 +22,6 @@ We recommend running the Jupyter Notebook scripts using [VSCode](https://code.vi
 
 The data preparation (including preprocessing, source reconstruction and parcellation) needs to be (roughly) matched to the training data for the canonical HMM. The tutorials illustrate how to perform these steps on new data. [MNE-Python](https://mne.tools/stable/index.html) is used to do the data processing. The most important thing to match is the sampling frequency (250 Hz) and parcellation.
 
-Canonical HMMs are available for the following parcellations:
-
-| Name           | parcellation\_file                                   |
-|----------------|------------------------------------------------------|
-| 38ROI\_Giles   | atlas-Giles\_nparc-38\_space-MNI\_res-8x8x8.nii.gz   |
-| 52ROI\_Glasser | atlas-Glasser\_nparc-52\_space-MNI\_res-8x8x8.nii.gz |
-
-For more information regarding the parcellations, see [here](https://osl-dynamics.readthedocs.io/en/latest/parcellations/index.html).
-
-There is also a sensor-level canonical HMM available for Elekta MEG. New parcellations could be made available on request, however, the rank of the [Cam-CAN](https://cam-can.mrc-cbu.cam.ac.uk/dataset/) data limits us to ~50 parcels.
-
 ### Elekta MEG
 
 - See `elekta_meg_parcel.ipynb` for a start-to-end tutorial on applying the canonical HMM to parcellated Elekta MEG data.
@@ -52,6 +41,20 @@ There is also a sensor-level canonical HMM available for Elekta MEG. New parcell
 - See `eeg.ipynb` for a start-to-end tutorial on applying the canonical HMM to parcellated EEG data. Note, to source reconstruct/parcellate EEG data we need medium/high-density EEG, e.g. ~64+ channels.
 
 Also see the `/contributions` directory for further example scripts and tutorials.
+
+## Models / Parcellations
+
+Canonical HMMs are available for the following parcellations:
+
+| Name           | parcellation\_file                                   |
+|----------------|------------------------------------------------------|
+| 38ROI\_Giles   | atlas-Giles\_nparc-38\_space-MNI\_res-8x8x8.nii.gz   |
+| 52ROI\_Glasser | atlas-Glasser\_nparc-52\_space-MNI\_res-8x8x8.nii.gz |
+| 54ROI\_DK      | atlas-DK\_nparc-54\_space-MNI\_res-8x8x8.nii.gz      |
+
+For more information regarding the parcellations, see [here](https://osl-dynamics.readthedocs.io/en/latest/parcellations/index.html).
+
+There is also a sensor-level canonical HMM available for Elekta MEG. New parcellations could be made available on request, however, the rank of the [Cam-CAN](https://cam-can.mrc-cbu.cam.ac.uk/dataset/) data limits us to ~50 parcels.
 
 ## Citation
 

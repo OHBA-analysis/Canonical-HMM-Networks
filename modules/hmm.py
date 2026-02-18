@@ -31,7 +31,7 @@ def prepare_data_for_canonical_hmm(data, parcellation):
     """
 
     # Validation
-    available_parcellations = ["38ROI_Giles", "52ROI_Glasser", "Elekta"]
+    available_parcellations = ["38ROI_Giles", "52ROI_Glasser", "54ROI_DK", "Elekta"]
     if parcellation not in available_parcellations:
         raise ValueError(f"parcellation much be one of: {available_parcellations}")
 
@@ -86,7 +86,7 @@ def load_canonical_hmm(n_states, parcellation, sequence_length=400, batch_size=6
     """
 
     # Validation
-    available_parcellations = ["38ROI_Giles", "52ROI_Glasser", "Elekta"]
+    available_parcellations = ["38ROI_Giles", "52ROI_Glasser", "54ROI_DK", "Elekta"]
     if parcellation not in available_parcellations:
         raise ValueError(f"parcellation much be one of: {available_parcellations}")
 
@@ -136,6 +136,8 @@ def plot_canonical_group_level_networks(n_states, parcellation, plots_dir="plots
         parcellation_file = "atlas-Giles_nparc-38_space-MNI_res-8x8x8.nii.gz"
     elif parcellation == "52ROI_Glasser":
         parcellation_file = "atlas-Glasser_nparc-52_space-MNI_res-8x8x8.nii.gz"
+    elif parcellation_file == "54ROI_DK":
+        parcellation_file = "atlas-DK_nparc-54_space-MNI_res-8x8x8.nii.gz"
     elif parcellation == "Elekta":
         parcellation == None
     else:

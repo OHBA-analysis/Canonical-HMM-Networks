@@ -46,11 +46,11 @@ Also see the `/contributions` directory for further example scripts and tutorial
 
 Canonical HMMs are available for the following parcellations:
 
-| Name           | parcellation\_file                                   |
-|----------------|------------------------------------------------------|
-| 38ROI\_Giles   | atlas-Giles\_nparc-38\_space-MNI\_res-8x8x8.nii.gz   |
-| 52ROI\_Glasser | atlas-Glasser\_nparc-52\_space-MNI\_res-8x8x8.nii.gz |
-| 54ROI\_DK      | atlas-DK\_nparc-54\_space-MNI\_res-8x8x8.nii.gz      |
+| Name      | parcellation\_file                                   |
+|-----------|------------------------------------------------------|
+| Giles38   | atlas-Giles\_nparc-38\_space-MNI\_res-8x8x8.nii.gz   |
+| Glasser52 | atlas-Glasser\_nparc-52\_space-MNI\_res-8x8x8.nii.gz |
+| DK54      | atlas-DK\_nparc-54\_space-MNI\_res-8x8x8.nii.gz      |
 
 For more information regarding the parcellations, see [here](https://osl-dynamics.readthedocs.io/en/latest/parcellations/index.html).
 

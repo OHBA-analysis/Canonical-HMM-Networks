@@ -14,10 +14,10 @@ from modules import hmm
 # Load data
 files = sorted(glob("BIDS/derivatives/*/lcmv-parc-raw.fif"))
 data = Data(files, picks="misc", reject_by_annotation="omit", n_jobs=8)
-data = hmm.prepare_data_for_canonical_hmm(data, parcellation="38ROI_Giles")
+data = hmm.prepare_data_for_canonical_hmm(data, parcellation="Giles38")
 
 # Load model
-model = hmm.load_canonical_hmm(n_states=12, parcellation="38ROI_Giles")
+model = hmm.load_canonical_hmm(n_states=12, parcellation="Giles38")
 model.summary()
 
 # Estimate state probabilities

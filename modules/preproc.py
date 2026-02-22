@@ -140,31 +140,9 @@ def detect_bad_segments(
     return raw
 
 
-def detect_bad_channels(*args, mode="std", **kwargs):
-    """Detect bad channels.
-
-    See _detect_bad_channels_std and _detect_bad_channels_psd for
-    arguments that can be passed to this function.
-
-    Parameters
-    ----------
-    mode : str, optional
-        Either 'std' or 'psd'.
-
-    Returns
-    -------
-    raw : mne.io.Raw
-        MNE Raw object with bad channels marked.
-    """
-    if mode == "std":
-        return _detect_bad_channels_std(*args, **kwargs)
-    elif mode == "psd":
-        return _detect_bad_channels_psd(*args, **kwargs)
-    else:
-        raise ValueError(f"mode must be 'std' or 'psd', got '{mode}'.")
-
-
-def _detect_bad_channels_std(raw, picks, ref_meg="auto", significance_level=0.05):
+def detect_bad_channels(
+    raw, picks, ref_meg="auto", significance_level=0.05, log10=True
+):
     """Detect bad channels using the G-ESD algorithm based on standard deviation.
 
     Parameters
@@ -173,10 +151,14 @@ def _detect_bad_channels_std(raw, picks, ref_meg="auto", significance_level=0.05
         MNE raw object.
     picks : str
         Channel types to pick. See Notes for recommendations.
-    ref_meg : str
+    ref_meg : str, optional
         ref_meg argument to pass with mne.pick_types.
-    significance_level : float
+    significance_level : float, optional
         Significance level for detecting outliers. Must be between 0-1.
+    log10 : bool, optional
+        Should we apply a log10 transform to the standard deviations?
+        This is normally a good idea to make sure the standard deviations
+        are normally distributed.
 
     Returns
     -------
@@ -195,8 +177,8 @@ def _detect_bad_channels_std(raw, picks, ref_meg="auto", significance_level=0.05
     and picks='grad' separately (in no particular order).
     """
     print()
-    print("Bad channel detection (std)")
-    print("---------------------------")
+    print("Bad channel detection")
+    print("---------------------")
 
     # Select channels
     if (picks == "mag") or (picks == "grad"):
@@ -217,6 +199,8 @@ def _detect_bad_channels_std(raw, picks, ref_meg="auto", significance_level=0.05
     # Calculate standard deviation for each channel
     data = raw.get_data(picks=ch_inds)
     std = np.std(data, axis=-1)
+    if log10:
+        std = np.log10(std)
 
     # Detect outliers
     mask = _gesd(std, alpha=significance_level)
@@ -224,97 +208,6 @@ def _detect_bad_channels_std(raw, picks, ref_meg="auto", significance_level=0.05
     bads = list(chs[mask])
 
     # Mark as bad
-    for bad in bads:
-        if bad not in raw.info["bads"]:
-            raw.info["bads"].append(bad)
-
-    # Print useful summary information
-    print(f"{len(bads)} bad channels:")
-    print(np.array(bads))
-
-    return raw
-
-
-def _detect_bad_channels_psd(
-    raw,
-    picks,
-    fmin=2,
-    fmax=80,
-    n_fft=2000,
-    significance_level=0.05,
-    ref_meg="auto",
-):
-    """Detect bad channels using PSD and G-ESD outlier detection.
-
-    Parameters
-    ----------
-    raw : mne.io.Raw
-        Raw data object.
-    picks : str or list of str
-        Channel types to pick.
-    fmin, fmax : float
-        Frequency range for PSD computation.
-    n_fft : int
-        FFT length for PSD.
-    significance_level : float
-        Significance level for GESD outlier detection.
-    ref_meg : str, optional
-        ref_meg argument to pass to mne.pick_types.
-
-    Returns
-    -------
-    raw : mne.io.Raw
-        MNE Raw object with bad channels marked.
-    """
-    print()
-    print("Bad channel detection (psd)")
-    print("---------------------------")
-
-    # Pick channels
-    if picks == "eeg":
-        chs = mne.pick_types(raw.info, eeg=True, exclude="bads")
-    else:
-        chs = mne.pick_types(raw.info, meg=picks, ref_meg=ref_meg, exclude="bads")
-
-    # Compute PSD (bad channels excluded by MNE)
-    psd = raw.compute_psd(
-        picks=chs,
-        fmin=fmin,
-        fmax=fmax,
-        n_fft=n_fft,
-        reject_by_annotation=True,
-        verbose=False,
-    )
-    pow_data = psd.get_data()
-
-    if len(chs) != pow_data.shape[0]:
-        raise RuntimeError(
-            f"Channel mismatch: {len(chs)} chans vs PSD shape {pow_data.shape[0]}"
-        )
-
-    # Check for NaN or zero PSD
-    bad_forced = [
-        ch
-        for ch, psd_ch in zip(chs, pow_data)
-        if np.any(np.isnan(psd_ch)) or np.all(psd_ch == 0)
-    ]
-    if bad_forced:
-        raise RuntimeError(
-            f"PSD contains NaNs or all-zero values for channels: {bad_forced}"
-        )
-
-    # Metric for detecting outliers in
-    pow_log = np.log10(pow_data)
-    X = np.std(pow_log, axis=-1)
-
-    # Detect artefacts with GESD
-    mask = _gesd(X, alpha=significance_level)
-
-    # Get the names for the bad channels
-    chs = np.array(raw.ch_names)[chs]
-    bads = chs[mask]
-
-    # Mark bad channels in the Raw object
     for bad in bads:
         if bad not in raw.info["bads"]:
             raw.info["bads"].append(bad)
@@ -797,5 +690,82 @@ def plot_sum_square_time_series(raw, exclude_bads=False):
         row += 1
     ax[0].set_title("Sum-Square Across Channels")
     ax[-1].set_xlabel("Time (seconds)")
+
+    plt.show()
+
+
+def plot_channel_stds(raw, exclude_bad_segments=True):
+    """Plot distribution of standard deviations across channels.
+
+    Parameters
+    ----------
+    raw : mne.io.Raw
+        MNE Raw object.
+    exclude_bad_segments : bool
+        Whether to exclude bad segments.
+    """
+
+    if exclude_bad_segments:
+        reject_by_annotation = "omit"
+    else:
+        reject_by_annotation = None
+
+    # --- NEW: get bad channel indices ---
+    bad_inds = [raw.ch_names.index(ch) for ch in raw.info["bads"]]
+
+    # Get all channels
+    is_ctf = raw.info["dev_ctf_t"] is not None
+    if is_ctf:
+        channel_types = {
+            "Axial Grads (chtype=mag)": mne.pick_types(
+                raw.info, meg="mag", ref_meg=False, exclude=[]
+            ),
+            "Ref Axial Grad (chtype=ref_meg)": mne.pick_types(
+                raw.info, meg="grad", exclude=[]
+            ),
+            "EEG": mne.pick_types(raw.info, eeg=True, exclude=[]),
+            "CSD": mne.pick_types(raw.info, csd=True, exclude=[]),
+        }
+    else:
+        channel_types = {
+            "Magnetometers": mne.pick_types(raw.info, meg="mag", exclude=[]),
+            "Gradiometers": mne.pick_types(raw.info, meg="grad", exclude=[]),
+            "EEG": mne.pick_types(raw.info, eeg=True, exclude=[]),
+            "CSD": mne.pick_types(raw.info, csd=True, exclude=[]),
+        }
+
+    # Get data
+    x = raw.get_data(reject_by_annotation=reject_by_annotation)
+
+    # Number of subplots
+    ncols = sum(len(c) > 0 for c in channel_types.values())
+
+    if ncols == 0:
+        return
+
+    fig, ax = plt.subplots(nrows=1, ncols=ncols, figsize=(9, 3.5))
+    if ncols == 1:
+        ax = [ax]
+
+    row = 0
+    for name, chan_inds in channel_types.items():
+        if len(chan_inds) == 0:
+            continue
+
+        # Compute stds
+        stds = x[chan_inds, :].std(axis=1)
+
+        # Plot histogram
+        ax[row].hist(stds, bins=24, histtype="step")
+        bad_in_type = np.intersect1d(chan_inds, bad_inds)
+        if len(bad_in_type) > 0:
+            bad_stds = x[bad_in_type, :].std(axis=1)
+            for s in bad_stds:
+                ax[row].axvline(s, linestyle="--", color="tab:red")
+
+        ax[row].set_xlabel("Standard Deviation")
+        ax[row].set_ylabel("Channel Count")
+        ax[row].set_title(name)
+        row += 1
 
     plt.show()

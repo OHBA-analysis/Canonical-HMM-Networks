@@ -768,4 +768,5 @@ def plot_channel_stds(raw, exclude_bad_segments=True):
         ax[row].set_title(name)
         row += 1
 
+    plt.tight_layout()
     plt.show()

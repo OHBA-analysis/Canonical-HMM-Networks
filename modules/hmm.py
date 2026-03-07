@@ -14,7 +14,7 @@ from osl_dynamics.models.hmm import Config, Model
 from osl_dynamics.utils import plotting
 
 
-def prepare_data_for_canonical_hmm(data, parcellation):
+def prepare_data_for_canonical_hmm(data, parcellation, models_dir="./models"):
     """Prepare data for a canonical HMM.
 
     Parameters
@@ -23,6 +23,8 @@ def prepare_data_for_canonical_hmm(data, parcellation):
         An osl-dynamics Data object.
     parcellation : str
         Name of the parcellation.
+    models_dir : str, optional
+        Path to directory containing the canonical HMMs.
 
     Returns
     -------
@@ -37,8 +39,8 @@ def prepare_data_for_canonical_hmm(data, parcellation):
 
     # Prepare data for a sensor-level HMM
     if parcellation == "Elekta":
-        pca_components_1 = np.load(f"models/{parcellation}/pca_components_1.npy")
-        pca_components_2 = np.load(f"models/{parcellation}/pca_components_2.npy")
+        pca_components_1 = np.load(f"{models_dir}/{parcellation}/pca_components_1.npy")
+        pca_components_2 = np.load(f"{models_dir}/{parcellation}/pca_components_2.npy")
         data.prepare(
             {
                 "pca": {"pca_components": pca_components_1},
@@ -49,8 +51,8 @@ def prepare_data_for_canonical_hmm(data, parcellation):
 
     # Prepare data for a parcel-level HMM
     else:
-        pca_components = np.load(f"models/{parcellation}/pca_components.npy")
-        template_cov = np.load(f"models/{parcellation}/template_cov.npy")
+        pca_components = np.load(f"{models_dir}/{parcellation}/pca_components.npy")
+        template_cov = np.load(f"{models_dir}/{parcellation}/template_cov.npy")
         data.prepare(
             {
                 "align_channel_signs": {
@@ -65,7 +67,9 @@ def prepare_data_for_canonical_hmm(data, parcellation):
     return data
 
 
-def load_canonical_hmm(n_states, parcellation, sequence_length=400, batch_size=64):
+def load_canonical_hmm(
+    n_states, parcellation, sequence_length=400, batch_size=64, models_dir="./models"
+):
     """Load a canonical HMM.
 
     Parameters
@@ -78,6 +82,8 @@ def load_canonical_hmm(n_states, parcellation, sequence_length=400, batch_size=6
         Sequence length.
     batch_size : int, optional
         Batch size.
+    models_dir : str, optional
+        Path to directory containing the canonical HMMs.
 
     Returns
     -------
@@ -91,11 +97,13 @@ def load_canonical_hmm(n_states, parcellation, sequence_length=400, batch_size=6
         raise ValueError(f"parcellation much be one of: {available_parcellations}")
 
     # Load HMM parameters
-    means = np.load(f"models/{parcellation}/{n_states:02d}_states/means.npy")
-    covs = np.load(f"models/{parcellation}/{n_states:02d}_states/covs.npy")
-    trans_prob = np.load(f"models/{parcellation}/{n_states:02d}_states/trans_prob.npy")
+    means = np.load(f"{models_dir}/{parcellation}/{n_states:02d}_states/means.npy")
+    covs = np.load(f"{models_dir}/{parcellation}/{n_states:02d}_states/covs.npy")
+    trans_prob = np.load(
+        f"{models_dir}/{parcellation}/{n_states:02d}_states/trans_prob.npy"
+    )
     initial_state_probs = np.load(
-        f"models/{parcellation}/{n_states:02d}_states/initial_state_probs.npy"
+        f"{models_dir}/{parcellation}/{n_states:02d}_states/initial_state_probs.npy"
     )
 
     # Create a model
@@ -118,7 +126,9 @@ def load_canonical_hmm(n_states, parcellation, sequence_length=400, batch_size=6
     return model
 
 
-def plot_canonical_group_level_networks(n_states, parcellation, plots_dir="plots"):
+def plot_canonical_group_level_networks(
+    n_states, parcellation, plots_dir="plots", models_dir="./models"
+):
     """Plot networks for a particular canonical HMM.
 
     Parameters
@@ -129,6 +139,8 @@ def plot_canonical_group_level_networks(n_states, parcellation, plots_dir="plots
         Name of the parcellation.
     plots_dir : str, optional
         Directory to save png files to.
+    models_dir : str, optional
+        Path to directory containing the canonical HMMs.
     """
     os.makedirs(plots_dir, exist_ok=True)
 

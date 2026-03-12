@@ -201,7 +201,7 @@ def lcmv_beamformer(
 
 def apply_lcmv_beamformer(
     fns,
-    raw,
+    raw=None,
     reject_by_annotation="omit",
     spatial_resolution=None,
     reference_brain="mni",
@@ -212,8 +212,9 @@ def apply_lcmv_beamformer(
     ----------
     fns : OSLFilenames
         Container for OSL filenames.
-    raw : instance of mne.io.Raw or mne.Epochs
+    raw : instance of mne.io.Raw or mne.Epochs, optional
         The data to apply the LCMV filter to.
+        If None, fns.preproc_file is used.
     reject_by_annotation : str | list of str | None
         If string, the annotation description to use to reject epochs.
         If list of str, the annotation descriptions to use to reject epochs.
@@ -238,6 +239,9 @@ def apply_lcmv_beamformer(
     print()
     print("Applying LCMV beamformer")
     print("------------------------")
+
+    if raw is None:
+        raw = mne.io.read_raw_fif(fns.preproc_file, preload=True)
 
     # Load filters
     filters = mne.beamformer.read_beamformer(fns.filters)

@@ -1,6 +1,7 @@
 """Utility functions and classes."""
 
 import os
+import sys
 import mne
 import scipy
 import shutil
@@ -119,6 +120,73 @@ class CoregFilenames:
         self.bet_outskin_plus_nose_mesh_file = f"{root}/scaled_outskin_plus_nose_mesh.nii.gz"
         self.bet_inskull_mesh_file = f"{root}/scaled_inskull_mesh.nii.gz"
         self.bet_outskull_mesh_file = f"{root}/scaled_outskull_mesh.nii.gz"
+
+
+class SessionLogger:
+    """Redirects all stdout/stderr to a per-session log file.
+
+    Progress messages can be printed to screen using the ``log`` method.
+
+    Usage
+    -----
+    with SessionLogger("sub-01_task-rest", log_dir="logs") as logger:
+        logger.log("Filtering...")
+        raw.resample(250)  # verbose output goes to log file only
+        logger.log("Done.")
+
+    Screen output:
+        [sub-01_task-rest] Filtering...
+        [sub-01_task-rest] Done.
+    """
+
+    def __init__(self, session, log_dir):
+        self.session = session
+        self.prefix = f"[{session}] "
+        self.log_dir = log_dir
+
+    def _timestamp(self):
+        """Return current time as HH:MM:SS string."""
+        from datetime import datetime
+        return datetime.now().strftime("%H:%M:%S")
+
+    def log(self, msg):
+        """Print a progress message to screen (and log file)."""
+        line = f"[{self._timestamp()} {self.session}] {msg}\n"
+        sys.__stdout__.write(line)
+        sys.__stdout__.flush()
+        self._log_file.write(line)
+        self._log_file.flush()
+
+    def error(self, msg):
+        """Print an error message to screen (and log file)."""
+        line = f"[{self._timestamp()} {self.session}] ERROR: {msg}\n"
+        sys.__stderr__.write(line)
+        sys.__stderr__.flush()
+        self._log_file.write(line)
+        self._log_file.flush()
+
+    def write(self, text):
+        if text:
+            self._log_file.write(text)
+            self._log_file.flush()
+
+    def flush(self):
+        self._log_file.flush()
+
+    def __enter__(self):
+        os.makedirs(self.log_dir, exist_ok=True)
+        log_path = os.path.join(self.log_dir, f"{self.session}.log")
+        self._log_file = open(log_path, "w")
+        self._old_stdout = sys.stdout
+        self._old_stderr = sys.stderr
+        sys.stdout = self
+        sys.stderr = self
+        return self
+
+    def __exit__(self, *args):
+        sys.stdout = self._old_stdout
+        sys.stderr = self._old_stderr
+        self._log_file.close()
 
 
 def system_call(cmd, verbose=True):

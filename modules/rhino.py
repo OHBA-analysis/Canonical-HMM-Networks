@@ -871,6 +871,7 @@ def coregister_head_and_mri(
     allow_mri_scaling=False,
     mni_fiducials=None,
     n_init=1,
+    plot_type="png",
 ):
     """Coregister HEAD (polhemus) and MRI space.
 
@@ -939,6 +940,11 @@ def coregister_head_and_mri(
         Defaults to [[1, 85, -41], [83, -20, -65], [-83, -20, -65]].
     n_init : int, optional
         Number of initialisations for the ICP algorithm that performs coregistration.
+    plot_type : str, optional
+        Type of coregistration plot to save. Options are "png", "html" or None.
+        "png" saves static PNG images (requires a display/render window).
+        "html" saves an interactive HTML file (works in headless environments).
+        None skips plotting.
     """
 
     # Note the jargon used varies for xforms and coord spaces:
@@ -1234,7 +1240,9 @@ def coregister_head_and_mri(
     # -----------------------
     # Plot the coregistration
     # -----------------------
-    plot_coregistration(fns, include_nose=use_nose)
+    if plot_type is not None:
+        filename = f"{fns.coreg_dir}/coreg.{plot_type}"
+        plot_coregistration(fns, include_nose=use_nose, filename=filename)
 
     print("Coregistration complete.")
 

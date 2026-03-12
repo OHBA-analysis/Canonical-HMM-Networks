@@ -103,7 +103,12 @@ plots/
 │   └── 4_psd_topo.png
 ├── sub-02_task-rest/
 │   └── ...
+└── report.html                  # QC summary report (updated after each step)
 ```
+
+## QC Report
+
+A self-contained HTML report (`plots/report.html`) is automatically generated after each step completes. It contains tabs for each step with all session QC plots embedded (PNGs as base64, coregistration as interactive HTML). Open it in a browser to review results. The report updates incrementally — after step 1 you'll see preprocessing plots, after step 2 surfaces appear, etc.
 
 ## Logging
 

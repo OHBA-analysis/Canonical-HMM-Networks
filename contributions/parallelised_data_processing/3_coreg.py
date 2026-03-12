@@ -31,7 +31,7 @@ n_workers = 4
 
 sys.path.append(str(project_dir))
 
-from modules import rhino, utils
+from modules import rhino, report, utils
 from modules.utils import SessionLogger
 
 
@@ -89,3 +89,4 @@ if __name__ == "__main__":
         print(f"\nStep 3 finished with errors in: {', '.join(failed)}")
     else:
         print("\nStep 3 complete.")
+    report.generate_report(plots_dir, sessions)

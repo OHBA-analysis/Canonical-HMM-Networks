@@ -1,5 +1,8 @@
 """Preprocessing functions."""
 
+import json
+from pathlib import Path
+
 import mne
 import numpy as np
 import matplotlib.pyplot as plt
@@ -592,6 +595,64 @@ def _grid_average_decimate(point_cloud, voxel_size):
             voxel_dict[key] = []
         voxel_dict[key].append(point)
     return np.array([np.mean(voxel_dict[key], axis=0) for key in voxel_dict])
+
+
+def save_qc_plots(raw, output_dir):
+    """Save preprocessing QC plots and summary.
+
+    Saves the following files to output_dir:
+    - 1_summary.json: preprocessing summary stats
+    - 1_psd.png: sensor-level PSD
+    - 1_sum_square.png: sum-square time series
+    - 1_sum_square_exclude_bads.png: sum-square excluding bad segments/channels
+    - 1_channel_stds.png: channel standard deviation distributions
+
+    Parameters
+    ----------
+    raw : mne.io.Raw
+        Preprocessed MNE Raw object.
+    output_dir : str or Path
+        Directory to save plots to.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save preprocessing summary
+    total_duration = raw.times[-1]
+    bad_duration = sum(
+        a["duration"]
+        for a in raw.annotations
+        if a["description"].startswith("bad")
+    )
+    summary = {
+        "total_duration_s": round(total_duration, 1),
+        "bad_duration_s": round(bad_duration, 1),
+        "bad_percent": round(100 * bad_duration / total_duration, 1),
+        "bad_channels": raw.info["bads"],
+        "n_bad_channels": len(raw.info["bads"]),
+    }
+    with open(output_dir / "1_summary.json", "w") as f:
+        json.dump(summary, f, indent=2)
+
+    # PSD
+    raw.compute_psd(fmax=45).plot()
+    plt.savefig(output_dir / "1_psd.png", dpi=150, bbox_inches="tight")
+    plt.close("all")
+
+    # Sum-square time series
+    plot_sum_square_time_series(raw)
+    plt.savefig(output_dir / "1_sum_square.png", dpi=150, bbox_inches="tight")
+    plt.close("all")
+
+    # Sum-square excluding bads
+    plot_sum_square_time_series(raw, exclude_bads=True)
+    plt.savefig(output_dir / "1_sum_square_exclude_bads.png", dpi=150, bbox_inches="tight")
+    plt.close("all")
+
+    # Channel standard deviations
+    plot_channel_stds(raw)
+    plt.savefig(output_dir / "1_channel_stds.png", dpi=150, bbox_inches="tight")
+    plt.close("all")
 
 
 def plot_sum_square_time_series(raw, exclude_bads=False):

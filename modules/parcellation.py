@@ -1,13 +1,19 @@
 """Parcellation."""
 
 import os
+from pathlib import Path
+
 import mne
 import scipy
 import numpy as np
 import nibabel as nib
+import matplotlib.pyplot as plt
 from fsl import wrappers as fsl_wrappers
 
 import osl_dynamics as osld
+from osl_dynamics.analysis import power, static
+from osl_dynamics.utils.plotting import plot_brain_surface
+
 from . import source_recon
 
 
@@ -148,6 +154,71 @@ def plot_psds(parc_fif, parcellation_file, fmin=0.5, fmax=45, filename=None):
         frequency_range=[fmin, fmax],
         filename=filename,
     )
+
+
+def save_qc_plots(parc_fif, parcellation_file, output_dir, cmap="hot"):
+    """Save parcellation QC plots.
+
+    Saves the following files to output_dir:
+    - 4_psd_topo.png: PSD topography plot
+    - 4_power_delta.png: delta band power map
+    - 4_power_theta.png: theta band power map
+    - 4_power_alpha.png: alpha band power map
+    - 4_power_beta.png: beta band power map
+    - 4_power_gamma.png: gamma band power map
+
+    Parameters
+    ----------
+    parc_fif : str
+        Path to parcellated fif file.
+    parcellation_file : str
+        Parcellation file name.
+    output_dir : str or Path
+        Directory to save plots to.
+    cmap : str, optional
+        Colormap for power maps.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # PSD topography
+    plot_psds(
+        parc_fif,
+        parcellation_file=parcellation_file,
+        filename=str(output_dir / "4_psd_topo.png"),
+    )
+    plt.close("all")
+
+    # Band power maps
+    parc_raw = mne.io.read_raw_fif(parc_fif)
+    parc_ts = parc_raw.get_data(picks="misc", reject_by_annotation="omit")
+    fs = parc_raw.info["sfreq"]
+    f, psd = static.welch_spectra(
+        parc_ts.T,
+        sampling_frequency=fs,
+        calc_coh=False,
+    )
+
+    mask_file = f"{osld.files.mask.path}/MNI152_T1_8mm_brain.nii.gz"
+    bands = {
+        "delta": [1, 4],
+        "theta": [4, 8],
+        "alpha": [8, 13],
+        "beta": [13, 30],
+        "gamma": [30, 45],
+    }
+    for band_name, freq_range in bands.items():
+        band_power = power.variance_from_spectra(f, psd, frequency_range=freq_range)
+        plot_brain_surface(
+            band_power,
+            mask_file=mask_file,
+            parcellation_file=parcellation_file,
+            title=f"{band_name} ({freq_range[0]}-{freq_range[1]} Hz)",
+            cmap=cmap,
+            symmetric_cbar=False,
+            filename=str(output_dir / f"4_power_{band_name}.png"),
+        )
+        plt.close("all")
 
 
 def _resample_parcellation(fns, parcellation_file, voxel_coords):

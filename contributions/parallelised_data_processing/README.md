@@ -44,32 +44,36 @@ python 4_source_recon_and_parc.py
 
 ## Configuration
 
-Each script has a **Config** block at the top. Edit these variables before running:
+Each script has a config block at the top. Edit these variables before running:
 
 ```python
-# --------- Config ---------
 project_dir = Path("/path/to/Canonical-HMM-Networks")
 input_dir = Path("BIDS")
 output_dir = Path("BIDS/derivatives")
+plots_dir = Path("plots")
 log_dir = Path("logs/1_preproc")
 sessions = {
     "sub-01_task-rest": {"subject": "sub-01", "file": "sub-01_task-rest.fif"},
     "sub-02_task-rest": {"subject": "sub-02", "file": "sub-02_task-rest.fif"},
-    "sub-03_task-rest": {"subject": "sub-03", "file": "sub-03_task-rest.fif"},
-    "sub-04_task-rest": {"subject": "sub-04", "file": "sub-04_task-rest.fif"},
 }
 n_workers = 4
-# ---------------------------
 ```
 
 - `project_dir` — Path to the cloned `Canonical-HMM-Networks` repository. This is used to find the `modules` and `models` directories. The scripts themselves can live anywhere.
 - `input_dir` — Path to your BIDS directory containing the raw data.
 - `output_dir` — Path to the output directory for derivatives.
+- `plots_dir` — Directory for QC plots (steps 1, 3, 4).
 - `log_dir` — Directory for per-session log files.
 - `sessions` — Dictionary of sessions to process. Each key is a session ID used for naming output files and logs. Each value contains the `subject` (BIDS subject directory) and `file` (MEG filename).
 - `n_workers` — Number of sessions to process in parallel.
 
-Some scripts have additional settings (e.g. `plots_dir`, `parcellation_file`, `gridstep`). See the Config block in each script for details.
+Step 2 (`2_surfaces.py`) uses a `subjects` list instead of `sessions` since surface extraction only needs to run once per subject:
+
+```python
+subjects = ["sub-01", "sub-02", "sub-03", "sub-04"]
+```
+
+Some scripts have additional settings (e.g. `parcellation_file`, `gridstep`). See the config block in each script for details.
 
 ## Output Structure
 
@@ -80,6 +84,10 @@ BIDS/derivatives/
 │   └── ...
 ├── anat_surfaces/
 │   ├── sub-01/
+│   │   ├── inskull.png
+│   │   ├── outskin.png
+│   │   ├── outskull.png
+│   │   └── ...
 │   └── ...
 └── osl/
     ├── sub-01_task-rest/
@@ -93,22 +101,28 @@ BIDS/derivatives/
 
 plots/
 ├── sub-01_task-rest/
+│   ├── 1_summary.json
+│   ├── 1_psd.png
 │   ├── 1_sum_square.png
 │   ├── 1_sum_square_exclude_bads.png
 │   ├── 1_channel_stds.png
-│   ├── 2_inskull.png
-│   ├── 2_outskin.png
-│   ├── 2_outskull.png
 │   ├── 3_coreg.html
-│   └── 4_psd_topo.png
+│   ├── 4_psd_topo.png
+│   ├── 4_power_delta.png
+│   ├── 4_power_theta.png
+│   ├── 4_power_alpha.png
+│   ├── 4_power_beta.png
+│   └── 4_power_gamma.png
 ├── sub-02_task-rest/
 │   └── ...
-└── report.html                  # QC summary report (updated after each step)
+└── report.html
 ```
 
 ## QC Report
 
-A self-contained HTML report (`plots/report.html`) is automatically generated after each step completes. It contains tabs for each step with all session QC plots embedded (PNGs as base64, coregistration as interactive HTML). Open it in a browser to review results. The report updates incrementally — after step 1 you'll see preprocessing plots, after step 2 surfaces appear, etc.
+A self-contained HTML report (`plots/report.html`) is automatically generated after steps 1, 3 and 4 complete. It contains tabs for each pipeline step with all session QC plots embedded. Open it in a browser to review results.
+
+The report updates incrementally — after step 1 you'll see preprocessing plots, after step 3 coregistration and surfaces appear, etc. Surface extraction plots (step 2) are automatically copied from the derivatives directory when the report is next generated, so they appear without step 2 needing to generate the report itself.
 
 ## Logging
 

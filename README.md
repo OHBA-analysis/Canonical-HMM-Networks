@@ -85,7 +85,7 @@ There is also a sensor-level canonical HMM available for Elekta MEG. New parcell
 
 If you find this resource useful, please cite the repository:
 
-> **Gohil, C., & Woolrich, M. W. (2025). Canonical HMM Networks (Version 0.4.2) [Computer software]. https://doi.org/10.5281/zenodo.17583973.**
+> **Gohil, C., & Woolrich, M. W. (2025). Canonical HMM Networks (Version 0.5.0) [Computer software]. https://doi.org/10.5281/zenodo.17583973.**
 
 And following papers:
 

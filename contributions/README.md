@@ -12,6 +12,7 @@ Python example scripts:
 
 - `apply_canonical_hmm.py`: added by @cgohil8
 
-Parallelised pipelines:
+Modules (in `/modules`):
 
-- `parallelised_data_processing/`: Scripts for running preprocessing, surface extraction, coregistration, source reconstruction and parcellation in parallel across sessions using `multiprocessing`. Added by @cgohil8. See the [README](parallelised_data_processing/README.md) for details.
+- `ica_preproc.py`: ICA-based artifact removal using ICLabel/MEGNet. Added by @YZMRX.
+

@@ -12,55 +12,32 @@ https://www.biorxiv.org/content/10.1101/2025.10.21.683692v2
 
 To run the code you need to install [FSL](https://fsl.fmrib.ox.ac.uk/fsl/docs/install/index.html) and [osl-dynamics](https://osl-dynamics.readthedocs.io/en/latest/install.html). Note, [osl-dynamics](https://osl-dynamics.readthedocs.io/en/latest/install.html) will install [MNE-Python](https://mne.tools/stable/index.html) automatically.
 
-Once you have installed the `osld` environment, a couple extra Python packages are needed. These can be installed via a terminal:
-```
-conda activate osld
-pip install fslpy ipyevents
-```
-
-We recommend running the Jupyter Notebook scripts using [VSCode](https://code.visualstudio.com/).
-
-**Use the `osld` kernel (conda environment) when running the scripts.**
-
-### Loading the modules
-
-The `/models` directory contains all the data files that contain the model weights. This directory can be downloaded on it's own or you can clone the entire repository.
-
-We provide a set of useful functions in the `/modules` directory. To make the `.py` mouldes within this directory accessible so you can import them in a script you need to put the `/modules` directory in the same directory as your main script, then you can import a particular file like this:
-
-```
-from modules import preproc, hmm  # etc
-```
-
-Alternatively, you can add the path to the `/modules` directory to the PYTHONPATH environment variable. This can be done in one of two ways:
-
-```
-export PYTHONPATH="/path/to/Canonical-HMM-Networks/modules:$PYTHONPATH"
-```
-
-or when you run your script via the command line:
-
-```
-PYTHONPATH="/path/to/Canonical-HMM-Networks/modules" python <script.py>
-```
-
-Or, you can add the path within your script using:
-
-```
-import sys
-
-sys.path.append("/path/to/Canonical-HMM-Networks/modules")
-```
+We recommend running the Jupyter Notebook scripts using [VSCode](https://code.visualstudio.com/). **Use the `osld` kernel (conda environment) when running the scripts.**
 
 ### Loading a canonical HMM
 
-The `modules/hmm.py` file contains a useful function for loading a canonical HMM within the osl-dynamics package. To use this function:
+The `/models` directory contains all the data files that contain the model weights. This directory can be downloaded on it's own or you can clone the entire repository.
 
+The `modules/hmm.py` file contains a useful function for loading a canonical HMM within the osl-dynamics package. If you are running scripts from outside this repository, you need to add the repository to your Python path:
+
+```python
+import sys
+sys.path.append("/path/to/Canonical-HMM-Networks")
+
+from modules import hmm
+
+model = hmm.load_canonical_hmm(n_states=8, parcellation="Glasser52", models_dir="/path/to/Canonical-HMM-Networks/models")
 ```
+
+If you are running from within the repository directory, you can simply do:
+
+```python
 from modules import hmm
 
 model = hmm.load_canonical_hmm(n_states=8, parcellation="Glasser52", models_dir="./models")
 ```
+
+The data processing pipeline (preprocessing, source reconstruction, parcellation, etc.) is provided by the `osl_dynamics.meeg` subpackage. See the tutorials below for usage examples.
 
 ### Tutorials
 
@@ -85,6 +62,10 @@ The data preparation (including preprocessing, source reconstruction and parcell
 - See `eeg.ipynb` for a start-to-end tutorial on applying the canonical HMM to parcellated EEG data. Note, to source reconstruct/parcellate EEG data we need medium/high-density EEG, e.g. ~64+ channels.
 
 Also see the `/contributions` directory for further example scripts and tutorials.
+
+### Parallelisation
+
+For parallelised batch processing scripts, see [examples](https://github.com/OHBA-analysis/osl-dynamics/tree/main/examples/meg_preproc) in osl-dynamics.
 
 ## Models / Parcellations
 

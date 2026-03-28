@@ -6,13 +6,14 @@ Jupyter Notebooks:
 
 - `plot_canonical_hmm_networks.ipynb`: added by @cgohil8
 - `opm_already-coregistered.ipynb`: added by @cgohil8
+- `opm_without-structural.ipynb`: added by @cgohil8
 - `eeg_icaLabel.ipynb`: added by @YZMRX in https://github.com/OHBA-analysis/Canonical-HMM-Networks/pull/3.
 
 Python example scripts:
 
 - `apply_canonical_hmm.py`: added by @cgohil8
 
-Modules (in `/modules`):
+Modules (in `../modules`):
 
 - `ica_preproc.py`: ICA-based artifact removal using ICLabel/MEGNet. Added by @YZMRX.
 

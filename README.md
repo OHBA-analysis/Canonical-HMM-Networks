@@ -1,10 +1,6 @@
 # Canonical HMM Networks for Studying M/EEG
 
-This repository contains canonical Hidden Markov Models (HMMs) that were pre-trained on the [Cam-CAN](https://cam-can.mrc-cbu.cam.ac.uk/dataset/) dataset (using the [time-delay embedding](https://www.nature.com/articles/s41467-018-05316-z) approach).
-
-## Preprint
-
-https://www.biorxiv.org/content/10.1101/2025.10.21.683692v2
+This repository contains canonical Hidden Markov Models (HMMs) that were pre-trained on the [Cam-CAN](https://cam-can.mrc-cbu.cam.ac.uk/dataset/) dataset (using the [time-delay embedding](https://www.nature.com/articles/s41467-018-05316-z) approach). See paper [here](https://direct.mit.edu/imag/article/doi/10.1162/IMAG.a.1190/135739/Canonical-Hidden-Markov-Model-Networks-for).
 
 ## How to use this repo
 
@@ -89,7 +85,7 @@ If you find this resource useful, please cite the repository:
 
 And following papers:
 
-> **Gohil, C., Huang, R., Higgins, C., van Es, M. W., Quinn, A. J., Vidaurre, D., & Woolrich, M. W. (2025). Canonical Hidden Markov Model Networks for Studying M/EEG. bioRxiv, 2025-10.**
+> **Gohil, C., Huang, R., Higgins, C., van Es, M. W., Quinn, A. J., Vidaurre, D., & Woolrich, M. W. (2026). Canonical Hidden Markov Model Networks for Studying M/EEG. Imaging Neuroscience, 4, IMAG.a.1190.**
 
 > **Gohil, C., Huang, R., Roberts, E., van Es, M. W., Quinn, A. J., Vidaurre, D., & Woolrich, M. W. (2024). osl-dynamics, a toolbox for modeling fast dynamic brain activity. Elife, 12, RP91949.**
 

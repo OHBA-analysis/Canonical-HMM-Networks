@@ -126,6 +126,168 @@ def load_canonical_hmm(
     return model
 
 
+def load_canonical_free_energy(n_states, parcellation, models_dir="./models"):
+    """Load the free energy of the Cam-CAN sessions used to train a canonical HMM.
+
+    These values were calculated by applying the canonical HMM to each session
+    in the Cam-CAN training data. They give a reference distribution we can
+    compare a new session to.
+
+    Parameters
+    ----------
+    n_states : int
+        Number of states.
+    parcellation : str
+        Name of the parcellation.
+    models_dir : str, optional
+        Path to directory containing the canonical HMMs.
+
+    Returns
+    -------
+    fe : np.ndarray
+        Variational free energy of each Cam-CAN session. Shape is
+        (n_sessions,).
+    """
+
+    # Validation
+    available_parcellations = ["Giles38", "Glasser52", "DK54"]
+    if parcellation not in available_parcellations:
+        raise ValueError(
+            f"a free energy distribution is only available for: "
+            f"{available_parcellations}, got '{parcellation}'."
+        )
+
+    return np.load(f"{models_dir}/{parcellation}/{n_states:02d}_states/fe.npy")
+
+
+def free_energy_percentile(fe, n_states, parcellation, models_dir="./models"):
+    """Percentile of a free energy within the Cam-CAN distribution.
+
+    Parameters
+    ----------
+    fe : float or list of float
+        Variational free energy of the new session(s). This must have been
+        calculated with the same canonical HMM (i.e. the same :code:`n_states`
+        and :code:`parcellation`).
+    n_states : int
+        Number of states.
+    parcellation : str
+        Name of the parcellation.
+    models_dir : str, optional
+        Path to directory containing the canonical HMMs.
+
+    Returns
+    -------
+    percentile : np.ndarray
+        Percentage of Cam-CAN sessions with a free energy below each value in
+        :code:`fe`. Shape is (n_sessions,).
+    """
+    reference_fe = load_canonical_free_energy(n_states, parcellation, models_dir)
+    fe = np.atleast_1d(fe)
+    return np.array([np.mean(reference_fe < f) * 100 for f in fe])
+
+
+def plot_free_energy_distribution(
+    fe,
+    n_states,
+    parcellation,
+    labels=None,
+    models_dir="./models",
+    ax=None,
+    filename=None,
+):
+    """Plot the Cam-CAN free energy distribution with new sessions marked on it.
+
+    Parameters
+    ----------
+    fe : float or list of float
+        Variational free energy of the new session(s). This must have been
+        calculated with the same canonical HMM (i.e. the same :code:`n_states`
+        and :code:`parcellation`).
+    n_states : int
+        Number of states.
+    parcellation : str
+        Name of the parcellation.
+    labels : str or list of str, optional
+        Label for each value in :code:`fe`. Only used if ten or fewer values
+        are passed.
+    models_dir : str, optional
+        Path to directory containing the canonical HMMs.
+    ax : matplotlib.axes.Axes, optional
+        Axis to plot on. A new figure is created if this is not passed.
+    filename : str, optional
+        Output filename. If passed, the figure is saved and closed.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Matplotlib figure object. Only returned if :code:`ax=None` and
+        :code:`filename=None`.
+    ax : matplotlib.axes.Axes
+        Matplotlib axis object. Only returned if :code:`ax=None` and
+        :code:`filename=None`.
+    """
+    reference_fe = load_canonical_free_energy(n_states, parcellation, models_dir)
+    fe = np.atleast_1d(fe)
+
+    if isinstance(labels, str):
+        labels = [labels]
+    if labels is not None and len(labels) != len(fe):
+        raise ValueError("Incorrect number of labels or free energies passed.")
+
+    create_fig = ax is None
+    if create_fig:
+        fig, ax = plt.subplots(figsize=(8, 4))
+    else:
+        fig = ax.get_figure()
+
+    # Reference distribution
+    ax.hist(
+        reference_fe,
+        bins=50,
+        color="lightgrey",
+        edgecolor="white",
+        linewidth=0.5,
+        label=f"Cam-CAN (n={reference_fe.shape[0]})",
+    )
+
+    # New sessions. We mark each session individually if there are only a few,
+    # otherwise we show them as a rug along the bottom of the plot
+    cmap = plt.get_cmap("tab10")
+    if len(fe) <= 10:
+        for i, f in enumerate(fe):
+            ax.axvline(
+                f,
+                color=cmap(i),
+                linewidth=2,
+                label=None if labels is None else labels[i],
+            )
+    else:
+        ax.plot(
+            fe,
+            np.zeros_like(fe),
+            marker="|",
+            markersize=14,
+            markeredgewidth=2,
+            linestyle="none",
+            color=cmap(0),
+            label=f"New sessions (n={len(fe)})",
+        )
+
+    ax.set_xlabel("Variational free energy (per sample)")
+    ax.set_ylabel("Number of sessions")
+    ax.set_title(f"{parcellation}, {n_states} states")
+    ax.legend(loc="upper left", frameon=False)
+    ax.spines[["top", "right"]].set_visible(False)
+
+    if filename is not None:
+        plotting.save(fig, filename, tight_layout=True)
+        return
+
+    if create_fig:
+        return fig, ax
+
+
 def plot_canonical_group_level_networks(
     n_states, parcellation, plots_dir="plots", models_dir="./models"
 ):

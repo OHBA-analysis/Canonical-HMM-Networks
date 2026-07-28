@@ -35,7 +35,7 @@ model = hmm.load_canonical_hmm(n_states=8, parcellation="Glasser52", models_dir=
 
 The data processing pipeline (preprocessing, source reconstruction, parcellation, etc.) is provided by the `osl_dynamics.meeg` subpackage. See the tutorials below for usage examples.
 
-### Tutorials
+## Tutorials
 
 The data preparation (including preprocessing, source reconstruction and parcellation) needs to be (roughly) matched to the training data for the canonical HMM. The tutorials illustrate how to perform these steps on new data. [MNE-Python](https://mne.tools/stable/index.html) is used to do the data processing. The most important thing to match is the sampling frequency (250 Hz) and parcellation.
 
@@ -58,6 +58,10 @@ The data preparation (including preprocessing, source reconstruction and parcell
 - See `eeg.ipynb` for a start-to-end tutorial on applying the canonical HMM to parcellated EEG data. Note, to source reconstruct/parcellate EEG data we need medium/high-density EEG, e.g. ~64+ channels.
 
 Also see the `/contributions` directory for further example scripts and tutorials.
+
+### Does the canonical HMM fit my data?
+
+The canonical HMMs were trained on [Cam-CAN](https://cam-can.mrc-cbu.cam.ac.uk/dataset/). It is worth checking that it is a reasonable description of your data. See `variational_free_energy.ipynb` for a tutorial on doing this check.
 
 ### Parallelisation
 

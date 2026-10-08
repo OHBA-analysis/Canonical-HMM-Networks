@@ -8,7 +8,17 @@ This repository contains canonical Hidden Markov Models (HMMs) that were pre-tra
 
 To run the code you need to install [FSL](https://fsl.fmrib.ox.ac.uk/fsl/docs/install/index.html) and [osl-dynamics](https://osl-dynamics.readthedocs.io/en/latest/install.html). Note, [osl-dynamics](https://osl-dynamics.readthedocs.io/en/latest/install.html) will install [MNE-Python](https://mne.tools/stable/index.html) automatically.
 
+The tutorials were tested against osl-dynamics v3.6.2.
+
+The tutorials are Jupyter Notebooks. Jupyter is not installed with osl-dynamics, so you need to add it to the `osld` conda environment:
+
+```
+conda install -n osld -c conda-forge jupyterlab
+```
+
 We recommend running the Jupyter Notebook scripts using [VSCode](https://code.visualstudio.com/). **Use the `osld` kernel (conda environment) when running the scripts.**
+
+Note, osl-dynamics downloads the parcellations, masks and surfaces it needs the first time they are used, so you need an internet connection the first time you run a tutorial. To download everything in advance (e.g. for a machine that will be offline), run `osl-dynamics-download-data` in the `osld` environment.
 
 ### Loading a canonical HMM
 
@@ -77,7 +87,7 @@ Canonical HMMs are available for the following parcellations:
 | Glasser52 | atlas-Glasser\_nparc-52\_space-MNI\_res-8x8x8.nii.gz |
 | DK54      | atlas-DK\_nparc-54\_space-MNI\_res-8x8x8.nii.gz      |
 
-For more information regarding the parcellations, see [here](https://osl-dynamics.readthedocs.io/en/latest/parcellations/index.html).
+For more information regarding the parcellations, see [here](https://github.com/OHBA-analysis/osl-files/tree/main/docs/parcellations).
 
 There is also a sensor-level canonical HMM available for Elekta MEG. New parcellations could be made available on request, however, the rank of the [Cam-CAN](https://cam-can.mrc-cbu.cam.ac.uk/dataset/) data limits us to ~50 parcels.
 

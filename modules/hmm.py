@@ -310,15 +310,15 @@ def plot_canonical_group_level_networks(
         parcellation_file = "atlas-Giles_nparc-38_space-MNI_res-8x8x8.nii.gz"
     elif parcellation == "Glasser52":
         parcellation_file = "atlas-Glasser_nparc-52_space-MNI_res-8x8x8.nii.gz"
-    elif parcellation_file == "DK54":
+    elif parcellation == "DK54":
         parcellation_file = "atlas-DK_nparc-54_space-MNI_res-8x8x8.nii.gz"
     elif parcellation == "Elekta":
-        parcellation == None
+        parcellation_file = None
     else:
         raise ValueError(f"{parcellation} unavailable.")
 
     # Load data
-    model_dir = f"models/{parcellation}/{n_states:02d}_states"
+    model_dir = f"{models_dir}/{parcellation}/{n_states:02d}_states"
     f = np.load(f"{model_dir}/f.npy")
     psds = np.load(f"{model_dir}/psds.npy")
     pow_maps = np.load(f"{model_dir}/pow_maps.npy")
@@ -365,9 +365,7 @@ def plot_canonical_group_level_networks(
             plotting.topoplot(
                 layout="neuromag306mag",
                 data=pow_maps[i],
-                channel_names=np.load(
-                    files.scanner.path / "neuromag306_channel_names.npy"
-                ),
+                channel_names=files.scanner.neuromag306_channel_names,
                 plot_boxes=False,
                 show_deleted_sensors=True,
                 show_names=False,

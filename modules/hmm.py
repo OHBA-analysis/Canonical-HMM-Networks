@@ -386,7 +386,6 @@ def plot_canonical_group_level_networks(
         )
         power.save(
             pow_maps,
-            mask_file="MNI152_T1_8mm_brain.nii.gz",
             parcellation_file=parcellation_file,
             subtract_mean=True,
             filename=f"{plots_dir}/pow_.png",

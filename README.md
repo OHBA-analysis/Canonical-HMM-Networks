@@ -6,23 +6,30 @@ This repository contains canonical Hidden Markov Models (HMMs) that were pre-tra
 
 ### Installation
 
-To run the code you need to install [FSL](https://fsl.fmrib.ox.ac.uk/fsl/docs/install/index.html) and [osl-dynamics](https://osl-dynamics.readthedocs.io/en/latest/install.html). Note, [osl-dynamics](https://osl-dynamics.readthedocs.io/en/latest/install.html) will install [MNE-Python](https://mne.tools/stable/index.html) automatically.
+To run the code you need to install:
 
-The tutorials were tested against osl-dynamics v3.6.2.
+- The FMRIB Software Library: [FSL](https://fsl.fmrib.ox.ac.uk/fsl/docs/install/index.html).
+- The OSL Dynamics Toolbox: [osl-dynamics](https://osl-dynamics.readthedocs.io/en/latest/install.html). Note, [osl-dynamics](https://osl-dynamics.readthedocs.io/en/latest/install.html) will install [MNE-Python](https://mne.tools/stable/index.html) automatically.
 
-The tutorials are Jupyter Notebooks. Jupyter is not installed with osl-dynamics, so you need to add it to the `osld` conda environment:
+The tutorials are Jupyter Notebooks. Jupyter is not installed with [osl-dynamics](https://osl-dynamics.readthedocs.io/en/latest/install.html), so you need to add it to the `osld` conda environment:
 
 ```
+conda activate osld
 conda install -n osld -c conda-forge jupyterlab
 ```
 
 We recommend running the Jupyter Notebook scripts using [VSCode](https://code.visualstudio.com/). **Use the `osld` kernel (conda environment) when running the scripts.**
 
-Note, osl-dynamics downloads the parcellations, masks and surfaces it needs the first time they are used, so you need an internet connection the first time you run a tutorial. To download everything in advance (e.g. for a machine that will be offline), run `osl-dynamics-download-data` in the `osld` environment.
+Note, osl-dynamics downloads the parcellations, masks and surfaces it needs the first time they are used, so you need an internet connection the first time you run a tutorial. To download everything in advance (e.g. for a machine that will be offline), run:
+
+```
+conda activate osld
+osl-dynamics-download-data
+```
 
 ### Loading a canonical HMM
 
-The `/models` directory contains all the data files that contain the model weights. This directory can be downloaded on it's own or you can clone the entire repository.
+The `/models` directory contains contains the model weights. This directory can be downloaded on it's own or you can clone the entire repository.
 
 The `modules/hmm.py` file contains a useful function for loading a canonical HMM within the osl-dynamics package. If you are running scripts from outside this repository, you need to add the repository to your Python path:
 

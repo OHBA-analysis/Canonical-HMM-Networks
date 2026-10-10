@@ -29,7 +29,7 @@ osl-dynamics-download-data
 
 ### Loading a canonical HMM
 
-The `/models` directory contains contains the model weights. This directory can be downloaded on it's own or you can clone the entire repository.
+The `/models` directory contains the model weights. This directory can be downloaded on its own or you can clone the entire repository.
 
 The `modules/hmm.py` file contains a useful function for loading a canonical HMM within the osl-dynamics package. If you are running scripts from outside this repository, you need to add the repository to your Python path:
 
@@ -102,7 +102,7 @@ There is also a sensor-level canonical HMM available for Elekta MEG. New parcell
 
 If you find this resource useful, please cite the repository:
 
-> **Gohil, C., & Woolrich, M. W. (2025). Canonical HMM Networks (Version 0.6.0) [Computer software]. https://doi.org/10.5281/zenodo.17583973.**
+> **Gohil, C., & Woolrich, M. W. (2026). Canonical HMM Networks (Version 0.7.0) [Computer software]. https://doi.org/10.5281/zenodo.17583973.**
 
 And following papers:
 

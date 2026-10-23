@@ -7,6 +7,7 @@ Jupyter Notebooks:
 - `plot_canonical_hmm_networks.ipynb`: added by @cgohil8
 - `opm_already-coregistered.ipynb`: added by @cgohil8
 - `opm_without-structural.ipynb`: added by @cgohil8
+- `eeg_lemon.ipynb`: added by @cgohil8
 - `eeg_icaLabel.ipynb`: added by @YZMRX in https://github.com/OHBA-analysis/Canonical-HMM-Networks/pull/3.
 
 Python example scripts:

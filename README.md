@@ -72,7 +72,9 @@ The data preparation (including preprocessing, source reconstruction and parcell
 
 #### EEG
 
-- See `eeg.ipynb` for a start-to-end tutorial on applying the canonical HMM to parcellated EEG data. Note, to source reconstruct/parcellate EEG data we need medium/high-density EEG, e.g. ~64+ channels.
+- See `eeg.ipynb` for a start-to-end tutorial on applying the canonical HMM to parcellated EEG data using a standard montage and standard brain. Note, to source reconstruct/parcellate EEG data we need medium/high-density EEG, e.g. ~64+ channels.
+
+- See `contributions/eeg_lemon.ipynb` for a tutorial using digitised electrode positions (LEMON dataset).
 
 Also see the `/contributions` directory for further example scripts and tutorials.
 

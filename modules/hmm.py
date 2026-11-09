@@ -17,10 +17,19 @@ from osl_dynamics.utils import plotting
 def prepare_data_for_canonical_hmm(data, parcellation, models_dir="./models"):
     """Prepare data for a canonical HMM.
 
+    For parcel-level data, the sign of each parcel is aligned to the template
+    of the canonical HMM. If the Data object holds several sessions, this is
+    done in two stages: a template is built from the new sessions and aligned
+    to the canonical template, then each session is aligned to it. Sessions
+    only need to match their own dataset, so this is more robust when the new
+    data does not closely match the Cam-CAN training data. With a single
+    session this is identical to aligning the session directly.
+
     Parameters
     ----------
     data : osl_dynamics.data.Data
-        An osl-dynamics Data object.
+        An osl-dynamics Data object. Pass all the sessions of a dataset in one
+        Data object to benefit from the two-stage sign alignment.
     parcellation : str
         Name of the parcellation.
     models_dir : str, optional
@@ -58,6 +67,7 @@ def prepare_data_for_canonical_hmm(data, parcellation, models_dir="./models"):
                 "align_channel_signs": {
                     "template_cov": template_cov,
                     "n_embeddings": 15,
+                    "two_stage": True,
                 },
                 "tde_pca": {"n_embeddings": 15, "pca_components": pca_components},
                 "standardize": {},

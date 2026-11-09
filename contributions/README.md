@@ -9,6 +9,7 @@ Jupyter Notebooks:
 - `opm_without-structural.ipynb`: added by @cgohil8
 - `eeg_lemon.ipynb`: added by @cgohil8
 - `eeg_icaLabel.ipynb`: added by @YZMRX in https://github.com/OHBA-analysis/Canonical-HMM-Networks/pull/3.
+- `fine_tune_canonical_hmm.ipynb`: two-stage sign flipping of a multi-session dataset and fine tuning the canonical HMM on it. Added by @cgohil8
 
 Python example scripts:
 
